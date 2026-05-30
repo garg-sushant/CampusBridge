@@ -2,10 +2,10 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRight,
   ShieldCheck,
-  GraduationCap,
   LayoutDashboard,
   FileText,
 } from "lucide-react";
@@ -17,12 +17,12 @@ export default function LandingPage() {
       {/* Header */}
       <header className="w-full px-6 md:px-12 lg:px-16 py-6 flex items-center justify-between border-b border-zinc-900 relative z-10">
         <div className="flex items-center space-x-3">
-          <div className="h-11 w-11 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm">
-            <GraduationCap className="h-6 w-6 text-indigo-400" aria-hidden="true" />
+          <div className="h-11 w-11 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm">
+            <Image src="/icon.png" alt="CampusBridge Logo" width={44} height={44} className="object-cover" />
           </div>
           <div>
             <span className="font-bold text-xl tracking-tight text-zinc-100 block">
-              Aegis Campus
+              CampusBridge
             </span>
             <span className="block text-xs text-zinc-400 font-mono tracking-widest uppercase -mt-0.5">
               Governance Hub
@@ -61,7 +61,7 @@ export default function LandingPage() {
             <span className="text-indigo-400">Governance & Grievance</span>
           </h1>
           <p className="text-zinc-400 text-lg md:text-xl leading-relaxed">
-            Eliminate administrative delays. Aegis uses intelligent multi-agent
+            Eliminate administrative delays. CampusBridge uses intelligent multi-agent
             workflows, automated policy matching, and multimodal verification to
             route, evaluate, and resolve campus issues transparently and officially.
           </p>
@@ -100,7 +100,7 @@ export default function LandingPage() {
           >
             <div className="flex items-start space-x-4">
               <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
-                <GraduationCap className="h-6 w-6 text-indigo-400" aria-hidden="true" />
+                <Image src="/icon.png" alt="CampusBridge Logo" width={24} height={24} className="object-cover" />
               </div>
               <div>
                 <h3 className="font-bold text-white text-base">
@@ -163,8 +163,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="w-full border-t border-zinc-900 py-6 px-6 text-center text-xs text-zinc-500 relative z-10">
-        © 2026 Aegis Governance Technologies. Designed for modern institutional
-        workflows.
+        © 2026 CampusBridge. Designed for modern institutional workflows.
       </footer>
     </div>
   );

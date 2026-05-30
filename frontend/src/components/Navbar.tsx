@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { GraduationCap, LogOut, FileText, Plus, LayoutDashboard, Menu, X, ShieldCheck } from 'lucide-react';
+import { LogOut, FileText, Plus, LayoutDashboard, Menu, X } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -41,12 +42,12 @@ export default function Navbar() {
           {/* Logo and Brand */}
           <div className="flex items-center space-x-3">
             <Link href={isStudent ? '/dashboard' : '/admin'} className="flex items-center space-x-3 group">
-              <div className="h-11 w-11 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm group-hover:border-zinc-700 transition-colors">
-                <GraduationCap className="h-6 w-6 text-indigo-400" />
+              <div className="h-11 w-11 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm group-hover:border-zinc-700 transition-colors">
+                <Image src="/icon.png" alt="CampusBridge Logo" width={44} height={44} className="object-cover" />
               </div>
               <div className="flex flex-col">
                 <span className="font-extrabold text-base sm:text-lg tracking-tight text-zinc-100 block">
-                  Aegis Campus
+                  CampusBridge
                 </span>
                 <span className="text-[11px] text-zinc-400 font-mono tracking-wider uppercase -mt-0.5">
                   Redressal Portal

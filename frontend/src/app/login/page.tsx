@@ -2,8 +2,9 @@
 
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
-import { GraduationCap, Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
+import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const { login, loginWithGoogle, loading, error } = useAuth();
@@ -101,10 +102,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md z-10">
         {/* Header */}
         <div className="flex flex-col items-center space-y-2 mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-md">
-            <GraduationCap className="h-7 w-7 text-indigo-400" />
+          <div className="h-14 w-14 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-md">
+            <Image src="/icon.png" alt="CampusBridge Logo" width={56} height={56} className="object-cover" />
           </div>
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">Sign In to Aegis</h2>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Sign In to CampusBridge</h2>
           <p className="text-sm text-zinc-400">Campus Governance & Grievance Portal</p>
         </div>
 
@@ -389,7 +390,7 @@ export default function LoginPage() {
                 </svg>
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">Choose an Account</h3>
-              <p className="text-xs text-zinc-400">to continue to Aegis Campus Portal</p>
+              <p className="text-xs text-zinc-400">to continue to CampusBridge Portal</p>
             </div>
 
             {/* Error in modal */}

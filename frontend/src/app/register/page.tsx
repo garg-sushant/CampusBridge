@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
-import { GraduationCap, Mail, Lock, User, UserCheck, Briefcase, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, UserCheck, Briefcase, AlertCircle } from 'lucide-react';
 import { Department } from '@/types';
 import { api } from '@/lib/api';
 
@@ -73,10 +74,10 @@ export default function RegisterPage() {
       <div className="w-full max-w-md z-10">
         {/* Header */}
         <div className="flex flex-col items-center space-y-2 mb-6">
-          <div className="h-14 w-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm">
-            <GraduationCap className="h-7 w-7 text-indigo-400" />
+          <div className="h-14 w-14 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm">
+            <Image src="/icon.png" alt="CampusBridge Logo" width={56} height={56} className="object-cover" />
           </div>
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">Create Aegis Account</h2>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Create CampusBridge Account</h2>
           <p className="text-sm text-zinc-400">Join the Campus Governance Hub</p>
         </div>
 
@@ -94,7 +95,7 @@ export default function RegisterPage() {
             {/* Role Toggle Selector */}
             <div className="space-y-1">
               <span className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Join Aegis as a...
+                Join CampusBridge as a...
               </span>
               <div 
                 className="grid grid-cols-2 gap-2 bg-zinc-950 p-1.5 rounded-xl border border-zinc-800"

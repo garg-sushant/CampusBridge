@@ -331,7 +331,7 @@ export default function SubmitComplaint() {
                 <div className="flex items-start space-x-3 p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs shadow-sm">
                   <Info className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden="true" />
                   <p className="leading-relaxed">
-                    <strong>Integrity Policy:</strong> Aegis evaluates uploaded files using AI models. Uploading irrelevant or spam images will impact your student trust score rating.
+                    <strong>Integrity Policy:</strong> CampusBridge evaluates uploaded files using AI models. Uploading irrelevant or spam images will impact your student trust score rating.
                   </p>
                 </div>
 
@@ -382,7 +382,7 @@ export default function SubmitComplaint() {
                 <div className="space-y-2">
                   <h3 className="text-2xl font-bold text-white">Grievance Submitted</h3>
                   <p className="text-sm text-neutral-400 leading-relaxed max-w-md mx-auto">
-                    Your grievance has been successfully registered. The Aegis system will now automatically evaluate your descriptions and route it to the appropriate department.
+                    Your grievance has been successfully registered. The CampusBridge system will now automatically evaluate your descriptions and route it to the appropriate department.
                   </p>
                 </div>
 

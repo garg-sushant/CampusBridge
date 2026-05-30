@@ -14,8 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Campus Governance & Grievance Verification System",
-  description: "AI-Powered institutional workflow automation and verification portal for university grievances.",
+  title: "CampusBridge – Campus Grievance & Governance Portal",
+  description: "CampusBridge is an AI-powered campus governance platform for filing, routing, and resolving institutional grievances transparently.",
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png',
+  },
 };
 
 export default function RootLayout({
