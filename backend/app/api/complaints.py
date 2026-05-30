@@ -38,15 +38,7 @@ def submit_complaint(
     db.commit()
     db.refresh(new_complaint)
     
-    # Add an initial timeline audit comment
-    init_comment = Comment(
-        complaint_id=new_complaint.id,
-        content=f"Grievance filed successfully by {current_user.full_name}.",
-        is_internal=False,
-        is_ai_generated=False
-    )
-    db.add(init_comment)
-    db.commit()
+
     
     # Trigger AI orchestration & routing
     from app.services.ai_agent import run_ai_orchestration
@@ -103,27 +95,29 @@ def upload_evidence(
         
         uploaded_attachments.append(attachment)
         
-    # Audit log entry for attachments
-    file_names = ", ".join([f.filename for f in files])
-    audit_comment = Comment(
-        complaint_id=complaint.id,
-        content=f"Evidence uploaded: {file_names}",
-        is_internal=False,
-        is_ai_generated=False
-    )
-    db.add(audit_comment)
-    db.commit()
+
     
     # Return updated list of complaints
-    return db.query(Complaint).filter(
-        Complaint.student_id == current_user.id if current_user.role == "student" else True
-    ).all()
+    if current_user.role == "student":
+        query = db.query(Complaint).filter(Complaint.student_id == current_user.id)
+    elif current_user.role == "department_head":
+        dept_name = current_user.department.name if current_user.department else ""
+        query = db.query(Complaint).filter(
+            or_(
+                Complaint.department_id == current_user.department_id,
+                Complaint.category == dept_name
+            )
+        )
+    else:
+        query = db.query(Complaint)
+    return query.all()
 
 @router.get("/", response_model=List[ComplaintListItem])
 def list_complaints(
     status: Optional[str] = None,
     urgency: Optional[str] = None,
     category: Optional[str] = None,
+    department_id: Optional[int] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -131,16 +125,25 @@ def list_complaints(
     query = db.query(Complaint)
     
     # Apply role-based filtration
-    if current_user.role == "student":
-        # Students can only see their own complaints
-        query = query.filter(Complaint.student_id == current_user.id)
+    if current_user.role == "admin":
+        # Admin / Dean sees everything, no filtration applied
+        pass
     elif current_user.role == "department_head":
-        # Department heads see complaints for their department
+        # Department heads see complaints for their department/category
         if current_user.department_id:
-            query = query.filter(Complaint.department_id == current_user.department_id)
+            dept_name = current_user.department.name if current_user.department else ""
+            query = query.filter(
+                or_(
+                    Complaint.department_id == current_user.department_id,
+                    Complaint.category == dept_name
+                )
+            )
         else:
             # Not assigned a department yet
             return []
+    else:
+        # Secure by default: students and unrecognized roles can only see their own complaints
+        query = query.filter(Complaint.student_id == current_user.id)
             
     # Filters
     if status:
@@ -149,6 +152,8 @@ def list_complaints(
         query = query.filter(Complaint.urgency == urgency)
     if category:
         query = query.filter(Complaint.category == category)
+    if department_id:
+        query = query.filter(Complaint.department_id == department_id)
         
     # Search title and description
     if search:
@@ -181,16 +186,25 @@ def get_complaint_detail(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this complaint."
         )
-    elif current_user.role == "department_head" and complaint.department_id != current_user.department_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to view complaints from other departments."
-        )
+    elif current_user.role == "department_head":
+        dept_name = current_user.department.name if current_user.department else ""
+        if complaint.department_id != current_user.department_id and complaint.category != dept_name:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view complaints from other departments."
+            )
         
-    # Filter comments: students must NOT see internal administrative comments
+    # Filter comments: 
+    # - Students must NOT see internal administrative comments
+    # - Deans (admin) must NOT see private notes written by department heads
     all_comments = complaint.comments
     if current_user.role == "student":
         complaint.comments = [c for c in all_comments if not c.is_internal]
+    elif current_user.role == "admin":
+        complaint.comments = [
+            c for c in all_comments 
+            if not (c.is_internal and c.user and c.user.role == "department_head")
+        ]
         
     # Sort comments by creation date ascending
     complaint.comments = sorted(complaint.comments, key=lambda x: x.created_at)
@@ -225,11 +239,13 @@ def add_comment(
             )
             
     # Check for department heads
-    if current_user.role == "department_head" and complaint.department_id != current_user.department_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You cannot post comments on other departments' complaints."
-        )
+    if current_user.role == "department_head":
+        dept_name = current_user.department.name if current_user.department else ""
+        if complaint.department_id != current_user.department_id and complaint.category != dept_name:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You cannot post comments on other departments' complaints."
+            )
         
     new_comment = Comment(
         complaint_id=complaint.id,
@@ -259,13 +275,15 @@ def update_complaint_status(
         )
         
     # Department heads cannot update complaints from other departments
-    if current_user.role == "department_head" and complaint.department_id != current_user.department_id:
-        # Allow if it's currently unassigned (None), but they are claiming it for their department
-        if complaint.department_id is not None or update_in.department_id != current_user.department_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Department heads can only manage complaints within their department."
-            )
+    if current_user.role == "department_head":
+        dept_name = current_user.department.name if current_user.department else ""
+        if complaint.department_id != current_user.department_id and complaint.category != dept_name:
+            # Allow if it's currently unassigned (None), but they are claiming it for their department
+            if complaint.department_id is not None or update_in.department_id != current_user.department_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Department heads can only manage complaints within their department."
+                )
             
     changes = []
     
@@ -313,7 +331,7 @@ def update_complaint_status(
         system_comment = Comment(
             complaint_id=complaint.id,
             content=f"Administrative Action: {audit_trail} (Updated by {current_user.full_name}).",
-            is_internal=False,
+            is_internal=True,
             is_ai_generated=False
         )
         db.add(system_comment)

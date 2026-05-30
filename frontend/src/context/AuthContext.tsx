@@ -10,6 +10,7 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (email: string) => Promise<void>;
   logout: () => void;
   register: (email: string, full_name: string, password: string, role?: string, departmentId?: number) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -36,7 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(userData);
     } catch (err) {
       console.error('Failed to load user session:', err);
-      localStorage.removeItem('token');
+      const isNetworkError = err instanceof TypeError || (err instanceof Error && err.name === 'AbortError');
+      if (!isNetworkError) {
+        localStorage.removeItem('token');
+      }
       setUser(null);
     } finally {
       setLoading(false);
@@ -44,17 +48,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    let active = true;
-    const initSession = async () => {
-      // Defer synchronous execution to avoid state cascading warnings in rendering phase
-      await Promise.resolve();
-      if (active) {
-        refreshUser();
+    refreshUser();
+  }, []);
+
+  // Synchronise authentication session changes (login/logout/role-switching) across multiple tabs instantly
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token') {
+        window.location.reload();
       }
     };
-    initSession();
+
+    window.addEventListener('storage', handleStorageChange);
     return () => {
-      active = false;
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
@@ -69,14 +76,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await api.get<User>('/auth/me');
       setUser(userData);
       
-      // Route based on role
+      // Route based on role using window.location.href to fully reload state and purge segment cache
       if (userData.role === 'admin' || userData.role === 'department_head') {
-        router.push('/admin');
+        window.location.href = '/admin';
       } else {
-        router.push('/dashboard');
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Authentication failed';
+      setError(errMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async (email: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.googleLogin(email);
+      localStorage.setItem('token', data.access_token);
+      
+      // Load user profile
+      const userData = await api.get<User>('/auth/me');
+      setUser(userData);
+      
+      // Route based on role using window.location.href to fully reload state and purge segment cache
+      if (userData.role === 'admin' || userData.role === 'department_head') {
+        window.location.href = '/admin';
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Google authentication failed';
       setError(errMsg);
       throw err;
     } finally {
@@ -116,14 +149,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
-    router.push('/login');
+    window.location.href = '/login';
   };
 
-  // React 19 standard: context value supplied directly to context object instead of context.Provider
   return (
-    <AuthContext value={{ user, loading, error, login, logout, register, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, error, login, loginWithGoogle, logout, register, refreshUser }}>
       {children}
-    </AuthContext>
+    </AuthContext.Provider>
   );
 }
 

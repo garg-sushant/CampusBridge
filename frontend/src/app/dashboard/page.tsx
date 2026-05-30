@@ -24,10 +24,27 @@ export default function StudentDashboard() {
   const [commentLoading, setCommentLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Filter out automated system/AI logs to preserve clean human-to-human timeline
+  const cleanConversationComments = comments.filter(c => {
+    if (c.is_ai_generated) return false;
+    const content = c.content || '';
+    if (
+      content.startsWith('Administrative Action:') ||
+      content.startsWith('System Action:') ||
+      content.startsWith('Grievance filed successfully') ||
+      content.startsWith('Evidence uploaded:') ||
+      content.includes('AI Orchestrator') ||
+      content.includes('AI Evidence Verifier')
+    ) {
+      return false;
+    }
+    return true;
+  });
+
   // Fetch complaints
-  const loadComplaints = useCallback(async () => {
+  const loadComplaints = useCallback(async (showLoading = false) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       let path = '/complaints?';
       if (statusFilter) path += `status=${statusFilter}&`;
       if (search) path += `search=${encodeURIComponent(search)}&`;
@@ -36,23 +53,14 @@ export default function StudentDashboard() {
     } catch (err) {
       console.error('Failed to load grievances', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [statusFilter, search]);
 
   useEffect(() => {
-    let active = true;
-    const run = async () => {
-      await Promise.resolve();
-      if (!active) return;
-      if (user) {
-        loadComplaints();
-      }
-    };
-    run();
-    return () => {
-      active = false;
-    };
+    if (user) {
+      loadComplaints(true);
+    }
   }, [user, loadComplaints]);
 
   // Fetch single complaint details including comments
@@ -77,7 +85,7 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
-      loadComplaints();
+      loadComplaints(false);
       if (selectedComplaint) {
         loadSelectedDetails(selectedComplaint.id, false);
       }
@@ -115,14 +123,16 @@ export default function StudentDashboard() {
     );
   }
 
-  if (!user) {
+  if (!user || user.role !== 'student') {
     return (
       <div className="min-h-screen bg-[#050508] flex flex-col items-center justify-center text-center px-4">
-        <AlertTriangle className="h-12 w-12 text-indigo-400 mb-4" aria-hidden="true" />
-        <h3 className="text-xl font-bold text-white">Unauthorized Access</h3>
-        <p className="text-sm text-neutral-400 mt-1 mb-4">Please log in to access your dashboard.</p>
+        <AlertTriangle className="h-12 w-12 text-rose-400 mb-4" aria-hidden="true" />
+        <h3 className="text-xl font-bold text-white">Access Denied</h3>
+        <p className="text-sm text-neutral-400 mt-1 mb-4">
+          {!user ? 'Please sign in to access your portal.' : 'This student portal is restricted to student accounts only.'}
+        </p>
         <Link href="/login" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-white transition-all">
-          Sign In
+          {!user ? 'Sign In' : 'Go Back'}
         </Link>
       </div>
     );
@@ -422,18 +432,43 @@ export default function StudentDashboard() {
                   </div>
                 </div>
 
-                {/* Comment Timeline Events */}
+                {/* Clean Conversation & Updates timeline */}
                 <div className="space-y-4">
-                  <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">Resolution Audit Timeline</span>
+                  <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">Grievance Conversation & Updates</span>
                   <div className="relative border-l border-zinc-800 pl-5 ml-2.5 space-y-5">
-                    {comments.map((comm) => (
-                      <div key={comm.id} className="relative space-y-1.5">
-                        {/* Dot marker */}
+                    {/* Student's Initial Submission Event comes first */}
+                    <div className="relative space-y-1.5 animate-slide-in">
+                      <div className="absolute left-[-22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-indigo-500 border-2 border-zinc-950 shadow-[0_0_8px_#4f46e5]" />
+                      
+                      <div className="flex items-center justify-between text-xs text-neutral-400">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-neutral-200">{selectedComplaint.student?.full_name || 'Student'}</span>
+                          <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded">
+                            INITIAL SUBMISSION
+                          </span>
+                        </div>
+                        <span className="font-mono text-neutral-500 text-xs">
+                          {new Date(selectedComplaint.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        </span>
+                      </div>
+                      
+                      <div className="text-xs text-neutral-300 leading-relaxed bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-2 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 px-2 py-0.5 bg-zinc-800 text-[9px] font-mono font-semibold uppercase rounded-bl border-l border-b border-zinc-700 text-zinc-400">
+                          {selectedComplaint.location}
+                        </div>
+                        <h5 className="font-bold text-white text-sm pr-20">{selectedComplaint.title}</h5>
+                        <p className="whitespace-pre-wrap text-zinc-300 text-xs pt-1">{selectedComplaint.description}</p>
+                      </div>
+                    </div>
+
+                    {/* Subsequent Human Updates & Chats */}
+                    {cleanConversationComments.map((comm) => (
+                      <div key={comm.id} className="relative space-y-1.5 animate-slide-in">
                         <div className="absolute left-[-22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-neutral-950 border-2 border-indigo-500" />
                         
                         <div className="flex items-center justify-between text-xs text-neutral-400">
                           <span className="font-bold text-neutral-200">
-                            {comm.user ? comm.user.full_name : 'System Auditor'}
+                            {comm.user ? comm.user.full_name : 'Staff'}
                           </span>
                           <span className="font-mono text-neutral-500 text-xs">
                             {new Date(comm.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}

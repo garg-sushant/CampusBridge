@@ -113,7 +113,7 @@ def run_ai_orchestration(complaint_id: str, db: Session):
             f"- Automated Routed Department: {dept_name}\n"
             f"- Severity Flagged Urgency: {detected_urgency.upper()}"
         ),
-        is_internal=False,
+        is_internal=True,
         is_ai_generated=True
     )
     db.add(ai_class_comment)
@@ -150,7 +150,7 @@ def run_ai_orchestration(complaint_id: str, db: Session):
                     f"- Linked Target Title: {other.title}\n"
                     f"- Action: Flagged as 'Verified Duplicate' to minimize administrative redundancy."
                 ),
-                is_internal=False,
+                is_internal=True,
                 is_ai_generated=True
             )
             db.add(ai_dup_comment)
@@ -197,7 +197,7 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
                 f"- Explanation: Attachment matched generic placeholder features.\n"
                 f"- Administrative Action: Submitting student's trust credibility score reduced by 5.0%."
             ),
-            is_internal=False,
+            is_internal=True,
             is_ai_generated=True
         )
         db.add(ai_alert_comment)
@@ -242,7 +242,7 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
                 f"- Analysis Result: {explanation}\n"
                 f"- Administrative Action: Submitting student's trust credibility score increased by 2.0%."
             ),
-            is_internal=False,
+            is_internal=True,
             is_ai_generated=True
         )
         db.add(ai_success_comment)

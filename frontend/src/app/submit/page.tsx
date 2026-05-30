@@ -389,12 +389,6 @@ export default function SubmitComplaint() {
                 <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                   <Link
                     href="/dashboard"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (typeof window !== 'undefined') {
-                        window.location.href = '/dashboard';
-                      }
-                    }}
                     className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-white shadow-lg transition-all text-sm"
                   >
                     Go to Portal Dashboard

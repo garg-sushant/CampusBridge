@@ -33,26 +33,42 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     options.cache = 'no-store';
   }
 
+  // Setup abort controller for timeout to prevent hung requests in background/duplicated tabs
+  const isUpload = path.includes('/upload') || options.body instanceof FormData;
+  const controller = new AbortController();
+  let timeoutId: NodeJS.Timeout | undefined;
+
+  if (!isUpload) {
+    timeoutId = setTimeout(() => controller.abort(), 6000); // 6 seconds timeout
+    options.signal = controller.signal;
+  }
+
   const url = `${BASE_URL}${path}`;
-  const response = await fetch(url, options);
+  try {
+    const response = await fetch(url, options);
 
-  if (!response.ok) {
-    let errorDetail = 'An error occurred';
-    try {
-      const errJson = await response.json();
-      errorDetail = errJson.detail || errJson.message || errorDetail;
-    } catch {
-      errorDetail = response.statusText || errorDetail;
+    if (!response.ok) {
+      let errorDetail = 'An error occurred';
+      try {
+        const errJson = await response.json();
+        errorDetail = errJson.detail || errJson.message || errorDetail;
+      } catch {
+        errorDetail = response.statusText || errorDetail;
+      }
+      throw new Error(errorDetail);
     }
-    throw new Error(errorDetail);
-  }
 
-  // Handle empty bodies (e.g. 204 status)
-  if (response.status === 204) {
-    return null as T;
-  }
+    // Handle empty bodies (e.g. 204 status)
+    if (response.status === 204) {
+      return null as T;
+    }
 
-  return response.json() as Promise<T>;
+    return response.json() as Promise<T>;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 export const api = {
@@ -117,5 +133,27 @@ export const api = {
     }
 
     return response.json() as Promise<T>;
+  },
+
+  // Google Login payload handler
+  googleLogin: async (email: string): Promise<{ access_token: string; token_type: string }> => {
+    const response = await fetch(`${BASE_URL}/auth/google`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      let errorDetail = 'Google Login failed';
+      try {
+        const errJson = await response.json();
+        errorDetail = errJson.detail || errorDetail;
+      } catch {}
+      throw new Error(errorDetail);
+    }
+
+    return response.json() as Promise<{ access_token: string; token_type: string }>;
   }
 };

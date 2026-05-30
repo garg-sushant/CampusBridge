@@ -25,7 +25,11 @@ export default function Navbar() {
       : []),
     ...(isAdmin
       ? [
-          { href: '/admin', label: 'Admin Desk', icon: LayoutDashboard },
+          { 
+            href: '/admin', 
+            label: user.role === 'admin' ? "Dean's Desk" : 'Dept Desk', 
+            icon: LayoutDashboard 
+          },
         ]
       : []),
   ];
@@ -85,14 +89,6 @@ export default function Navbar() {
                   <span className="text-xs font-bold font-mono text-zinc-400 uppercase tracking-wide">
                     {user.role === 'admin' ? 'System Admin' : user.role === 'department_head' ? 'Dept Head' : 'Student'}
                   </span>
-                  {isStudent && (
-                    <>
-                      <span className="text-zinc-700 text-xs font-bold">•</span>
-                      <span className="text-xs font-extrabold font-mono text-indigo-400">
-                        Trust: {user.trust_score.toFixed(0)}%
-                      </span>
-                    </>
-                  )}
                 </div>
               </div>
             </div>
@@ -157,11 +153,6 @@ export default function Navbar() {
                   <span className="text-xs font-bold font-mono text-zinc-400 uppercase bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
                     {user.role === 'admin' ? 'Admin' : user.role === 'department_head' ? 'Dept Head' : 'Student'}
                   </span>
-                  {isStudent && (
-                    <span className="text-xs font-bold font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/10">
-                      Trust Integrity: {user.trust_score.toFixed(0)}%
-                    </span>
-                  )}
                 </div>
               </div>
             </div>

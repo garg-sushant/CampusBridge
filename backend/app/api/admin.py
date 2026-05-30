@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from typing import List
 from app.core.database import get_db
 from app.core.security import require_staff, get_current_user
@@ -14,37 +14,60 @@ def get_dashboard_statistics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
+    # Base queries
+    complaint_query = db.query(Complaint)
+    
+    # If department head, restrict complaint queries to their assigned department or category name
+    if current_user.role == "department_head":
+        if current_user.department_id:
+            dept_name = current_user.department.name if current_user.department else ""
+            complaint_query = complaint_query.filter(
+                or_(
+                    Complaint.department_id == current_user.department_id,
+                    Complaint.category == dept_name
+                )
+            )
+        else:
+            complaint_query = complaint_query.filter(Complaint.id == "none")
+        
     # Total count
-    total_complaints = db.query(Complaint).count()
+    total_complaints = complaint_query.count()
     
     # Active complaints (everything except resolved and rejected)
-    active_complaints = db.query(Complaint).filter(
+    active_complaints = complaint_query.filter(
         Complaint.status.in_(["submitted", "verified", "assigned", "in_progress"])
     ).count()
     
     # Resolved complaints
-    resolved_complaints = db.query(Complaint).filter(Complaint.status == "resolved").count()
+    resolved_complaints = complaint_query.filter(Complaint.status == "resolved").count()
     
     # Resolution Rate
     resolution_rate = 0.0
     if total_complaints > 0:
         resolution_rate = round((resolved_complaints / total_complaints) * 100, 2)
         
-    # Duplicate and Fake count (attachments that are rejected are "fake")
-    duplicate_count = db.query(Complaint).filter(Complaint.is_duplicate == True).count()
+    # Duplicate and Fake count
+    duplicate_count = complaint_query.filter(Complaint.is_duplicate == True).count()
     
     # A rejected complaint is treated as a spam/fake complaint
-    fake_count = db.query(Complaint).filter(Complaint.status == "rejected").count()
+    fake_count = complaint_query.filter(Complaint.status == "rejected").count()
     
     # Department Distribution
-    dept_distribution_raw = db.query(
+    dept_query = db.query(
         Department.name, 
         func.count(Complaint.id)
     ).join(
         Complaint, 
         Complaint.department_id == Department.id, 
         isouter=True
-    ).group_by(Department.name).all()
+    )
+    if current_user.role == "department_head":
+        if current_user.department_id:
+            dept_query = dept_query.filter(Department.id == current_user.department_id)
+        else:
+            dept_query = dept_query.filter(Department.id == -1)
+        
+    dept_distribution_raw = dept_query.group_by(Department.name).all()
     
     dept_distribution = [
         DepartmentStats(department_name=name, count=count) 
@@ -52,10 +75,22 @@ def get_dashboard_statistics(
     ]
     
     # Urgency Distribution
-    urgency_distribution_raw = db.query(
+    urgency_query = db.query(
         Complaint.urgency, 
         func.count(Complaint.id)
-    ).group_by(Complaint.urgency).all()
+    )
+    if current_user.role == "department_head":
+        if current_user.department_id:
+            dept_name = current_user.department.name if current_user.department else ""
+            urgency_query = urgency_query.filter(
+                or_(
+                    Complaint.department_id == current_user.department_id,
+                    Complaint.category == dept_name
+                )
+            )
+        else:
+            urgency_query = urgency_query.filter(Complaint.id == "none")
+    urgency_distribution_raw = urgency_query.group_by(Complaint.urgency).all()
     
     urgency_distribution = [
         UrgencyStats(urgency=urgency, count=count) 
@@ -63,10 +98,22 @@ def get_dashboard_statistics(
     ]
     
     # Category Distribution
-    category_distribution_raw = db.query(
+    category_query = db.query(
         Complaint.category, 
         func.count(Complaint.id)
-    ).group_by(Complaint.category).all()
+    )
+    if current_user.role == "department_head":
+        if current_user.department_id:
+            dept_name = current_user.department.name if current_user.department else ""
+            category_query = category_query.filter(
+                or_(
+                    Complaint.department_id == current_user.department_id,
+                    Complaint.category == dept_name
+                )
+            )
+        else:
+            category_query = category_query.filter(Complaint.id == "none")
+    category_distribution_raw = category_query.group_by(Complaint.category).all()
     
     category_distribution = [
         CategoryStats(category=cat, count=count) 

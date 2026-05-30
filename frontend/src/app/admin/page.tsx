@@ -43,9 +43,9 @@ export default function AdminDashboard() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Load complaints and stats
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (showLoading = false) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       let path = '/complaints?';
       if (statusFilter) path += `status=${statusFilter}&`;
       if (urgencyFilter) path += `urgency=${urgencyFilter}&`;
@@ -56,19 +56,19 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('Failed to load grievances', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [statusFilter, urgencyFilter, deptFilter, search]);
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (showLoading = false) => {
     try {
-      setStatsLoading(true);
+      if (showLoading) setStatsLoading(true);
       const data = await api.get<AdminDashboardStats>('/admin/stats');
       setStats(data);
     } catch (err) {
       console.error('Failed to load dashboard metrics', err);
     } finally {
-      setStatsLoading(false);
+      if (showLoading) setStatsLoading(false);
     }
   }, []);
 
@@ -97,20 +97,11 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    const run = async () => {
-      await Promise.resolve();
-      if (!active) return;
-      if (user) {
-        loadData();
-        loadStats();
-        loadDepts();
-      }
-    };
-    run();
-    return () => {
-      active = false;
-    };
+    if (user) {
+      loadData(true);
+      loadStats(true);
+      loadDepts();
+    }
   }, [user, loadData, loadStats, loadDepts]);
 
   // Load comments in background without resetting active drawer form fields
@@ -145,8 +136,8 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
-      loadData();
-      loadStats();
+      loadData(false);
+      loadStats(false);
       if (selectedComplaint) {
         loadSelectedComments(selectedComplaint.id);
       }
@@ -222,6 +213,45 @@ export default function AdminDashboard() {
     );
   }
 
+  // Dynamically resolve department details for title rendering
+  const activeUserDept = departments.find(d => d.id === user?.department_id);
+  const activeDeptName = activeUserDept ? activeUserDept.name : '';
+  
+  const dashboardTitle = user?.role === 'admin' 
+    ? "Dean's Governance Desk" 
+    : user?.role === 'department_head' && activeDeptName 
+    ? `${activeDeptName} Desk` 
+    : "Administrative Desk";
+
+  const dashboardSubtitle = user?.role === 'admin'
+    ? "Review and monitor campus-wide grievances, automated verification data, and statuses."
+    : user?.role === 'department_head' && activeDeptName
+    ? `Review and resolve grievances assigned to the ${activeDeptName} department.`
+    : "Review campus grievances, inspect automated verification data, and route tasks to appropriate departments.";
+
+  // Filter out automated system/AI logs to preserve clean human-to-human timeline
+  const cleanConversationComments = comments.filter(c => {
+    if (c.is_ai_generated) return false;
+    const content = c.content || '';
+    if (
+      content.startsWith('Administrative Action:') ||
+      content.startsWith('System Action:') ||
+      content.startsWith('Grievance filed successfully') ||
+      content.startsWith('Evidence uploaded:') ||
+      content.includes('AI Orchestrator') ||
+      content.includes('AI Evidence Verifier')
+    ) {
+      return false;
+    }
+    
+    // Dean (admin) should see replies of dept to students, but NOT private/internal notes by department heads
+    if (user?.role === 'admin' && c.is_internal && c.user?.role === 'department_head') {
+      return false;
+    }
+    
+    return true;
+  });
+
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 text-white relative">
       <Navbar />
@@ -232,8 +262,8 @@ export default function AdminDashboard() {
           {/* Top Panel Title */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-900 pb-5 bg-zinc-950">
             <div>
-              <h1 className="text-3xl font-extrabold tracking-tight">Administrative Desk</h1>
-              <p className="text-zinc-400 text-sm mt-1">Review campus grievances, inspect automated verification data, and route tasks to appropriate departments.</p>
+              <h1 className="text-3xl font-extrabold tracking-tight">{dashboardTitle}</h1>
+              <p className="text-zinc-400 text-sm mt-1">{dashboardSubtitle}</p>
             </div>
             <div className="text-xs text-zinc-400 font-semibold font-mono tracking-wider bg-zinc-900 border border-zinc-800 px-4 py-1.5 rounded-full uppercase shadow-sm">
               {user.role.replace('_', ' ')} clearance
@@ -400,20 +430,22 @@ export default function AdminDashboard() {
                 </select>
               </div>
 
-              {/* Department filter */}
-              <div className="relative min-w-48">
-                <select
-                  value={deptFilter}
-                  onChange={(e) => setDeptFilter(e.target.value ? Number(e.target.value) : '')}
-                  aria-label="Filter complaints by department"
-                  className="w-full px-4 py-3 rounded-xl glass-input text-sm bg-neutral-950 focus:outline-none"
-                >
-                  <option value="">All Departments</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Department filter (Only visible to Dean/Admin) */}
+              {user?.role === 'admin' && (
+                <div className="relative min-w-48">
+                  <select
+                    value={deptFilter}
+                    onChange={(e) => setDeptFilter(e.target.value ? Number(e.target.value) : '')}
+                    aria-label="Filter complaints by department"
+                    className="w-full px-4 py-3 rounded-xl glass-input text-sm bg-neutral-950 focus:outline-none"
+                  >
+                    <option value="">All Departments</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Registry table list */}
@@ -453,7 +485,7 @@ export default function AdminDashboard() {
                           <th scope="row" className="p-4.5 font-bold text-left text-white">
                             {c.student?.full_name}
                             <span className="block text-xs text-zinc-400 font-mono tracking-wide font-normal mt-0.5">
-                              Trust: {c.student?.trust_score.toFixed(0)}%
+                              Trust: {c.student?.trust_score?.toFixed(0) ?? '100'}%
                             </span>
                           </th>
                           <td className="p-4.5">
@@ -530,7 +562,7 @@ export default function AdminDashboard() {
                   <span className={`block font-extrabold text-base mt-0.5 ${
                     selectedComplaint.student && selectedComplaint.student.trust_score >= 90 ? 'text-emerald-400' : 'text-indigo-400'
                   }`}>
-                    {selectedComplaint.student?.trust_score.toFixed(0)}%
+                    {selectedComplaint.student?.trust_score?.toFixed(0) ?? '100'}%
                   </span>
                 </div>
               </div>
@@ -540,113 +572,148 @@ export default function AdminDashboard() {
             <div className="space-y-5 border-b border-zinc-900 pb-6">
               <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">Administrative Orchestration</span>
               
-              {actionError && (
-                <div className="flex items-start space-x-2.5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs" role="alert">
-                  <AlertTriangle className="h-5 w-5 shrink-0 text-rose-400 mt-0.5" aria-hidden="true" />
-                  <span className="font-semibold leading-relaxed">{actionError}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* Status */}
-                <div className="space-y-1.5">
-                  <label htmlFor="action-status" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Workflow Status</label>
-                  <select
-                    id="action-status"
-                    value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg glass-input text-xs bg-neutral-950 font-medium"
-                  >
-                    <option value="submitted">Submitted</option>
-                    <option value="verified">Verified</option>
-                    <option value="assigned">Assigned</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
-
-                {/* Urgency */}
-                <div className="space-y-1.5">
-                  <label htmlFor="action-urgency" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Grievance Urgency</label>
-                  <select
-                    id="action-urgency"
-                    value={newUrgency}
-                    onChange={(e) => setNewUrgency(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg glass-input text-xs bg-neutral-950 font-medium"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-
-                {/* Department Routing */}
-                <div className="col-span-2 space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label htmlFor="action-dept" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Department Assignment</label>
-                    {user?.role === 'department_head' && (
-                      <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded animate-pulse">
-                        Locked to your purview
+              {user?.role === 'admin' ? (
+                <div className="p-5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 relative overflow-hidden shadow-inner space-y-4">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
+                  <div className="flex items-center space-x-2 text-indigo-400">
+                    <span className="text-xs font-bold font-mono tracking-wider uppercase bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
+                      Read-Only Mode
+                    </span>
+                    <span className="text-[10px] text-zinc-400 font-semibold font-mono tracking-wider uppercase">
+                      Dean Clearance
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="block text-zinc-500 font-semibold uppercase text-[9px] tracking-wider">Current Status</span>
+                      <span className="block font-bold text-white capitalize mt-0.5">{selectedComplaint.status.replace('_', ' ')}</span>
+                    </div>
+                    <div>
+                      <span className="block text-zinc-500 font-semibold uppercase text-[9px] tracking-wider">Urgency Level</span>
+                      <span className="block font-bold text-white capitalize mt-0.5">{selectedComplaint.urgency}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="block text-zinc-500 font-semibold uppercase text-[9px] tracking-wider">Assigned Department</span>
+                      <span className="block font-bold text-white mt-0.5">
+                        {selectedComplaint.department?.name || 'Unassigned (Claim Desk)'}
                       </span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 leading-relaxed pt-1 border-t border-white/5">
+                    Note: You have complete view-only clearance as Dean. Modifying orchestration values or submitting timeline comments is disabled for this role.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {actionError && (
+                    <div className="flex items-start space-x-2.5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs" role="alert">
+                      <AlertTriangle className="h-5 w-5 shrink-0 text-rose-400 mt-0.5" aria-hidden="true" />
+                      <span className="font-semibold leading-relaxed">{actionError}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Status */}
+                    <div className="space-y-1.5">
+                      <label htmlFor="action-status" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Workflow Status</label>
+                      <select
+                        id="action-status"
+                        value={newStatus}
+                        onChange={(e) => setNewStatus(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-lg glass-input text-xs bg-neutral-950 font-medium"
+                      >
+                        <option value="submitted">Submitted</option>
+                        <option value="verified">Verified</option>
+                        <option value="assigned">Assigned</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+
+                    {/* Urgency */}
+                    <div className="space-y-1.5">
+                      <label htmlFor="action-urgency" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Grievance Urgency</label>
+                      <select
+                        id="action-urgency"
+                        value={newUrgency}
+                        onChange={(e) => setNewUrgency(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-lg glass-input text-xs bg-neutral-950 font-medium"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+
+                    {/* Department Routing */}
+                    <div className="col-span-2 space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label htmlFor="action-dept" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Department Assignment</label>
+                        {user?.role === 'department_head' && (
+                          <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded animate-pulse">
+                            Locked to your purview
+                          </span>
+                        )}
+                      </div>
+                      <select
+                        id="action-dept"
+                        value={newDeptId}
+                        disabled={user?.role === 'department_head'}
+                        onChange={(e) => setNewDeptId(e.target.value ? Number(e.target.value) : '')}
+                        className="w-full px-3 py-2.5 rounded-lg glass-input text-xs bg-neutral-950 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Unassigned (Claim Desk)</option>
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Duplicate link check */}
+                    <div className="col-span-2 flex items-center space-x-2 pt-1">
+                      <input
+                        type="checkbox"
+                        checked={isDuplicateFlag}
+                        onChange={(e) => setIsDuplicateFlag(e.target.checked)}
+                        id="isDuplicate"
+                        className="rounded border-white/10 bg-neutral-950 text-indigo-600 focus:ring-0"
+                      />
+                      <label htmlFor="isDuplicate" className="text-sm text-neutral-300 select-none cursor-pointer">
+                        Link as Duplicate Grievance
+                      </label>
+                    </div>
+
+                    {isDuplicateFlag && (
+                      <div className="col-span-2 space-y-1.5">
+                        <label htmlFor="duplicate-target" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Target Duplicate ID</label>
+                        <input
+                          id="duplicate-target"
+                          type="text"
+                          value={duplicateInput}
+                          onChange={(e) => setDuplicateInput(e.target.value)}
+                          placeholder="Enter target grievance UUID..."
+                          className="w-full px-3.5 py-2.5 rounded-lg glass-input text-sm"
+                        />
+                      </div>
                     )}
                   </div>
-                  <select
-                    id="action-dept"
-                    value={newDeptId}
-                    disabled={user?.role === 'department_head'}
-                    onChange={(e) => setNewDeptId(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2.5 rounded-lg glass-input text-xs bg-neutral-950 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+
+                  {/* Apply Action Button */}
+                  <button
+                    onClick={handleApplyActions}
+                    disabled={actionLoading}
+                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm text-white shadow-lg transition-all cursor-pointer"
                   >
-                    <option value="">Unassigned (Claim Desk)</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Duplicate link check */}
-                <div className="col-span-2 flex items-center space-x-2 pt-1">
-                  <input
-                    type="checkbox"
-                    checked={isDuplicateFlag}
-                    onChange={(e) => setIsDuplicateFlag(e.target.checked)}
-                    id="isDuplicate"
-                    className="rounded border-white/10 bg-neutral-950 text-indigo-600 focus:ring-0"
-                  />
-                  <label htmlFor="isDuplicate" className="text-sm text-neutral-300 select-none cursor-pointer">
-                    Link as Duplicate Grievance
-                  </label>
-                </div>
-
-                {isDuplicateFlag && (
-                  <div className="col-span-2 space-y-1.5">
-                    <label htmlFor="duplicate-target" className="block text-xs text-neutral-400 uppercase tracking-wider font-semibold">Target Duplicate ID</label>
-                    <input
-                      id="duplicate-target"
-                      type="text"
-                      value={duplicateInput}
-                      onChange={(e) => setDuplicateInput(e.target.value)}
-                      placeholder="Enter target grievance UUID..."
-                      className="w-full px-3.5 py-2.5 rounded-lg glass-input text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Apply Action Button */}
-              <button
-                onClick={handleApplyActions}
-                disabled={actionLoading}
-                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm text-white shadow-lg transition-all"
-              >
-                {actionLoading ? (
-                  <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
-                ) : (
-                  <span>Apply Orchestration Settings</span>
-                )}
-              </button>
+                    {actionLoading ? (
+                      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                    ) : (
+                      <span>Apply Orchestration Settings</span>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Description details */}
@@ -695,17 +762,43 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {/* Audit log comments */}
+            {/* Clean Conversation & Updates timeline */}
             <div className="space-y-4">
-              <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">Grievance Audit Logs</span>
+              <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">Grievance Conversation & Updates</span>
               <div className="relative border-l border-zinc-800 pl-5 ml-2.5 space-y-5">
-                {comments.map((comm) => (
-                  <div key={comm.id} className="relative space-y-1.5">
+                {/* Student's Initial Submission Event comes first */}
+                <div className="relative space-y-1.5 animate-slide-in">
+                  <div className="absolute left-[-22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-indigo-500 border-2 border-zinc-950 shadow-[0_0_8px_#4f46e5]" />
+                  
+                  <div className="flex items-center justify-between text-xs text-neutral-400">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-neutral-200">{selectedComplaint.student?.full_name || 'Student'}</span>
+                      <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded">
+                        INITIAL SUBMISSION
+                      </span>
+                    </div>
+                    <span className="font-mono text-neutral-500 text-xs">
+                      {new Date(selectedComplaint.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                  </div>
+                  
+                  <div className="text-xs text-neutral-300 leading-relaxed bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-2 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 px-2 py-0.5 bg-zinc-800 text-[9px] font-mono font-semibold uppercase rounded-bl border-l border-b border-zinc-700 text-zinc-400">
+                      {selectedComplaint.location}
+                    </div>
+                    <h5 className="font-bold text-white text-sm pr-20">{selectedComplaint.title}</h5>
+                    <p className="whitespace-pre-wrap text-zinc-300 text-xs pt-1">{selectedComplaint.description}</p>
+                  </div>
+                </div>
+
+                {/* Subsequent Human Updates & Chats */}
+                {cleanConversationComments.map((comm) => (
+                  <div key={comm.id} className="relative space-y-1.5 animate-slide-in">
                     <div className="absolute left-[-22.5px] top-1.5 h-3.5 w-3.5 rounded-full bg-neutral-950 border-2 border-indigo-500" />
                     
                     <div className="flex items-center justify-between text-xs text-neutral-400">
                       <div className="flex items-center space-x-2">
-                        <span className="font-bold text-neutral-200">{comm.user ? comm.user.full_name : 'System Auditor'}</span>
+                        <span className="font-bold text-neutral-200">{comm.user ? comm.user.full_name : 'Staff'}</span>
                         {comm.is_internal && (
                           <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
                             INTERNAL NOTE
@@ -727,42 +820,44 @@ export default function AdminDashboard() {
           </div>
 
           {/* Comment submission bar */}
-          <div className="p-5 border-t border-zinc-900 bg-zinc-950 space-y-4">
-            <form onSubmit={handleAddComment} className="space-y-4">
-              <div className="flex gap-2">
-                <label htmlFor="admin-comment" className="sr-only">Post administrative progress update</label>
-                <input
-                  id="admin-comment"
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Post administrative progress update..."
-                  className="flex-1 px-4 py-3 rounded-xl glass-input text-sm placeholder-neutral-500 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={!newComment.trim()}
-                  aria-label="Send administrative comment"
-                  title="Send administrative comment"
-                  className="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg transition-all shrink-0"
-                >
-                  <Send className="h-4.5 w-4.5" aria-hidden="true" />
-                </button>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={isInternalComment}
-                  onChange={(e) => setIsInternalComment(e.target.checked)}
-                  id="isInternal"
-                  className="rounded border-white/10 bg-neutral-950 text-rose-600 focus:ring-0"
-                />
-                <label htmlFor="isInternal" className="text-xs text-neutral-400 font-bold uppercase select-none cursor-pointer">
-                  Post as Staff-Only Internal Note
-                </label>
-              </div>
-            </form>
-          </div>
+          {user?.role !== 'admin' && (
+            <div className="p-5 border-t border-zinc-900 bg-zinc-950 space-y-4">
+              <form onSubmit={handleAddComment} className="space-y-4">
+                <div className="flex gap-2">
+                  <label htmlFor="admin-comment" className="sr-only">Post administrative progress update</label>
+                  <input
+                    id="admin-comment"
+                    type="text"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Post administrative progress update..."
+                    className="flex-1 px-4 py-3 rounded-xl glass-input text-sm placeholder-neutral-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newComment.trim()}
+                    aria-label="Send administrative comment"
+                    title="Send administrative comment"
+                    className="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg transition-all shrink-0 cursor-pointer"
+                  >
+                    <Send className="h-4.5 w-4.5" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={isInternalComment}
+                    onChange={(e) => setIsInternalComment(e.target.checked)}
+                    id="isInternal"
+                    className="rounded border-white/10 bg-neutral-950 text-rose-600 focus:ring-0"
+                  />
+                  <label htmlFor="isInternal" className="text-xs text-neutral-400 font-bold uppercase select-none cursor-pointer">
+                    Post as Staff-Only Internal Note
+                  </label>
+                </div>
+              </form>
+            </div>
+          )}
         </aside>
       )}
     </div>
