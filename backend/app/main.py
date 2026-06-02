@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.services.storage import ensure_upload_dir
-from app.api import auth, departments, complaints, admin
+from app.api import auth, departments, complaints, admin, assessment
 
 # Instantiate FastAPI application
 app = FastAPI(
@@ -23,12 +23,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ensure database tables exist
+from app.models import base
+Base.metadata.create_all(bind=engine)
+
 # Startup DB initialisation and upload folder check
 @app.on_event("startup")
 def startup_event():
-    # Verify that the SQLite or target database tables exist
-    Base.metadata.create_all(bind=engine)
-    
     # Establish storage structures
     upload_path = ensure_upload_dir()
     
@@ -40,6 +41,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(departments.router, prefix="/api")
 app.include_router(complaints.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(assessment.router, prefix="/api")
 
 @app.get("/")
 def read_root():

@@ -42,6 +42,7 @@ class User(Base):
     department = relationship("Department", back_populates="members", foreign_keys=[department_id])
     complaints = relationship("Complaint", back_populates="student", foreign_keys="[Complaint.student_id]")
     comments = relationship("Comment", back_populates="user")
+    trust_history = relationship("TrustScoreHistory", back_populates="user", cascade="all, delete-orphan")
 
 class Department(Base):
     __tablename__ = "departments"
@@ -78,6 +79,9 @@ class Complaint(Base):
     department = relationship("Department", back_populates="complaints", foreign_keys=[department_id])
     attachments = relationship("Attachment", back_populates="complaint", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="complaint", cascade="all, delete-orphan")
+    evaluations = relationship("AgentEvaluation", back_populates="complaint", cascade="all, delete-orphan")
+    audit_trails = relationship("AuditTrail", back_populates="complaint", cascade="all, delete-orphan")
+    decision_logs = relationship("DecisionLog", back_populates="complaint", cascade="all, delete-orphan")
     
     # Self-referential relationship for duplicates
     duplicate_of = relationship("Complaint", remote_side=[id], backref="duplicates")
@@ -110,3 +114,54 @@ class Comment(Base):
     # Relationships
     complaint = relationship("Complaint", back_populates="comments")
     user = relationship("User", back_populates="comments")
+
+class TrustScoreHistory(Base):
+    __tablename__ = "trust_score_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    previous_score = Column(Float, nullable=False)
+    new_score = Column(Float, nullable=False)
+    delta = Column(Float, nullable=False)
+    reason = Column(String(512), nullable=False)
+    created_at = Column(UTCDateTime(), server_default=func.now())
+
+    user = relationship("User", back_populates="trust_history")
+
+class AgentEvaluation(Base):
+    __tablename__ = "agent_evaluations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    complaint_id = Column(String(36), ForeignKey("complaints.id"), nullable=False)
+    agent_name = Column(String(100), nullable=False)  # Evidence_Agent, Quality_Agent, Severity_Agent
+    raw_response = Column(Text, nullable=False)  # JSON raw payload from LLM
+    score_metric = Column(Integer, nullable=True)
+    created_at = Column(UTCDateTime(), server_default=func.now())
+
+    complaint = relationship("Complaint", back_populates="evaluations")
+
+class AuditTrail(Base):
+    __tablename__ = "audit_trails"
+
+    id = Column(Integer, primary_key=True, index=True)
+    complaint_id = Column(String(36), ForeignKey("complaints.id"), nullable=False)
+    action = Column(String(100), nullable=False)  # PIPELINE_STARTED, EVALUATED, DECISION_SEALED, REJECTED
+    actor = Column(String(100), nullable=False, default="SYSTEM")  # SYSTEM, DEAN_ADMIN
+    notes = Column(Text, nullable=True)
+    created_at = Column(UTCDateTime(), server_default=func.now())
+
+    complaint = relationship("Complaint", back_populates="audit_trails")
+
+class DecisionLog(Base):
+    __tablename__ = "decision_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    complaint_id = Column(String(36), ForeignKey("complaints.id"), nullable=False)
+    integrity_score = Column(Integer, nullable=False)
+    severity_level = Column(String(50), nullable=False)
+    confidence = Column(Integer, nullable=False)
+    decision = Column(String(50), nullable=False)  # REJECT, MANUAL_REVIEW, FORWARD_TO_DEPARTMENT
+    reasoning_summary = Column(Text, nullable=False)
+    created_at = Column(UTCDateTime(), server_default=func.now())
+
+    complaint = relationship("Complaint", back_populates="decision_logs")

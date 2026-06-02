@@ -7,6 +7,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     UPLOAD_DIR: str = "uploads"
+    
+    # xAI Grok LLM Integration Configurations
+    GROK_API_KEY: str = ""
+    CHATGROK_API_KEY: str = ""
+    GROK_API_URL: str = "https://api.x.ai/v1"
+    GROK_MODEL: str = "grok-beta"
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),

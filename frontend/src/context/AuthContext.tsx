@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setUser(null);
         setLoading(false);
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to load user session:', err);
       const isNetworkError = err instanceof TypeError || (err instanceof Error && err.name === 'AbortError');
       if (!isNetworkError) {
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
       }
       setUser(null);
     } finally {
@@ -51,18 +51,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshUser();
   }, []);
 
-  // Synchronise authentication session changes (login/logout/role-switching) across multiple tabs instantly
+  // Detect duplicated tab and perform a clean single reload to refresh client state
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'token') {
-        window.location.reload();
+    if (typeof window !== 'undefined') {
+      const currentName = window.name;
+      const storedName = sessionStorage.getItem('tab_name');
+      
+      if (!currentName || currentName !== storedName) {
+        const newName = 'tab_' + Math.random().toString(36).substring(2);
+        window.name = newName;
+        sessionStorage.setItem('tab_name', newName);
+        
+        // If storedName is present and differs, it confirms the tab was duplicated!
+        if (storedName && currentName !== storedName) {
+          window.location.reload();
+        }
       }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
+    }
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -70,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const data = await api.login(email, password);
-      localStorage.setItem('token', data.access_token);
+      sessionStorage.setItem('token', data.access_token);
       
       // Load user profile
       const userData = await api.get<User>('/auth/me');
@@ -96,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const data = await api.googleLogin(email);
-      localStorage.setItem('token', data.access_token);
+      sessionStorage.setItem('token', data.access_token);
       
       // Load user profile
       const userData = await api.get<User>('/auth/me');
@@ -147,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setUser(null);
     window.location.href = '/login';
   };

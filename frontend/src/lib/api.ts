@@ -1,8 +1,10 @@
-const BASE_URL = 'http://localhost:8000/api';
+const BASE_URL = typeof window !== 'undefined' 
+  ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api') 
+  : 'http://localhost:8000/api';
 
 function getAuthToken(): string | null {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('token');
+    return sessionStorage.getItem('token');
   }
   return null;
 }
