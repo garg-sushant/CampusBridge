@@ -25,6 +25,7 @@ export default function SubmitComplaint() {
   const [step, setStep] = useState(1); // 1: Info Form, 2: Upload Files, 3: Success Screen
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [rejectionDetail, setRejectionDetail] = useState<{ message: string; reason: string } | null>(null);
 
   // Load departments
   useEffect(() => {
@@ -74,6 +75,7 @@ export default function SubmitComplaint() {
 
   const handleNextStep = () => {
     setFormError(null);
+    setRejectionDetail(null);
     if (!title || !description || !category || !location) {
       setFormError('Please fill in all details before proceeding.');
       return;
@@ -84,6 +86,7 @@ export default function SubmitComplaint() {
   const handleSubmit = async () => {
     setLoading(true);
     setFormError(null);
+    setRejectionDetail(null);
     try {
       // 1. Submit complaint metadata
       const complaintData = await api.post<Complaint>('/complaints/submit', {
@@ -101,11 +104,30 @@ export default function SubmitComplaint() {
       setStep(3);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Failed to submit grievance. Please try again.';
-      setFormError(errMsg);
+      if (
+        errMsg.includes('Submission Rejected') || 
+        errMsg.includes('Fake') || 
+        errMsg.includes('Integrity Rating') || 
+        errMsg.includes('low-integrity') ||
+        errMsg.includes('Daily Submission Limit') ||
+        errMsg.includes('quota')
+      ) {
+        setRejectionDetail({
+          message: errMsg.includes('Daily Submission Limit') 
+            ? 'Daily Submission Limit Reached (Max 5 per day)' 
+            : 'Grievance Rejected by AI Credibility Auditor',
+          reason: errMsg
+        });
+        setFormError(null);
+      } else {
+        setFormError(errMsg);
+      }
+
     } finally {
       setLoading(false);
     }
   };
+
 
   if (authLoading) {
     return (
@@ -166,12 +188,43 @@ export default function SubmitComplaint() {
                   <p className="text-sm text-neutral-400">Describe the issue clearly. The system will analyze the details for automatic categorization.</p>
                 </div>
 
+                {rejectionDetail && (
+                  <div className="p-5 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-200 space-y-3 animate-shake shadow-2xl relative overflow-hidden">
+                    <div className="flex items-start space-x-3">
+                      <div className="h-9 w-9 rounded-xl bg-rose-900/60 border border-rose-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                        <AlertCircle className="h-5 w-5 text-rose-400" aria-hidden="true" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                          <span>⚠️ {rejectionDetail.message}</span>
+                        </h4>
+                        <p className="text-xs text-rose-200 leading-relaxed font-mono bg-rose-950/90 p-3 rounded-xl border border-rose-500/20">
+                          {rejectionDetail.reason}
+                        </p>
+                        <p className="text-[11px] text-rose-300/80 pt-1">
+                          <strong>Notice:</strong> Your grievance was <strong>not submitted</strong> or stored in our portal. Please provide genuine and detailed information about an authentic campus issue.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setRejectionDetail(null)}
+                        className="px-3.5 py-1.5 bg-rose-900/50 hover:bg-rose-800/80 border border-rose-500/30 rounded-lg text-xs font-bold text-rose-200 transition-all cursor-pointer"
+                      >
+                        Dismiss & Edit Grievance
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {formError && (
                   <div className="flex items-center space-x-2 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm" role="alert">
                     <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
                     <span>{formError}</span>
                   </div>
                 )}
+
 
                 <div className="space-y-5">
                   {/* Title */}
@@ -276,12 +329,46 @@ export default function SubmitComplaint() {
                   <p className="text-xs text-neutral-400">Photos help administrators verify details instantly and speed up resolutions.</p>
                 </div>
 
+                {rejectionDetail && (
+                  <div className="p-5 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-200 space-y-3 animate-shake shadow-2xl relative overflow-hidden">
+                    <div className="flex items-start space-x-3">
+                      <div className="h-9 w-9 rounded-xl bg-rose-900/60 border border-rose-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                        <AlertCircle className="h-5 w-5 text-rose-400" aria-hidden="true" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                          <span>⚠️ {rejectionDetail.message}</span>
+                        </h4>
+                        <p className="text-xs text-rose-200 leading-relaxed font-mono bg-rose-950/90 p-3 rounded-xl border border-rose-500/20">
+                          {rejectionDetail.reason}
+                        </p>
+                        <p className="text-[11px] text-rose-300/80 pt-1">
+                          <strong>Notice:</strong> Your grievance was <strong>not submitted</strong> or stored in our portal. Please provide genuine and detailed information about an authentic campus issue.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRejectionDetail(null);
+                          setStep(1);
+                        }}
+                        className="px-3.5 py-1.5 bg-rose-900/50 hover:bg-rose-800/80 border border-rose-500/30 rounded-lg text-xs font-bold text-rose-200 transition-all cursor-pointer"
+                      >
+                        Return to Step 1 & Edit
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {formError && (
                   <div className="flex items-center space-x-2 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm" role="alert">
                     <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
                     <span>{formError}</span>
                   </div>
                 )}
+
 
                 {/* Upload drag drop box */}
                 <div className="relative border-2 border-dashed border-zinc-800 hover:border-indigo-500 rounded-2xl p-8 text-center bg-zinc-900/50 hover:bg-zinc-905 transition-all cursor-pointer group shadow-sm">

@@ -16,14 +16,15 @@
 }
 
 html {
-  font-size: 21px;
+  font-size: 15px;
 }
 
 @media (min-width: 768px) {
   html {
-    font-size: 22px;
+    font-size: 15px;
   }
 }
+
 
 body {
   background: var(--background);

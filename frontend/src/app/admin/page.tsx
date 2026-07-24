@@ -7,13 +7,15 @@ import { api } from '@/lib/api';
 import { Complaint, Comment, Department, AdminDashboardStats } from '@/types';
 import Navbar from '@/components/Navbar';
 import { 
-  Search, LogOut, AlertTriangle, 
+  Search, AlertTriangle, 
   HelpCircle, Send, X, Image as ImageIcon,
-  LayoutDashboard, Layers, Flame, Users
+  Layers, Flame, Users, ArrowLeft
 } from 'lucide-react';
 
+
 export default function AdminDashboard() {
-  const { user, logout, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+
   
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -33,6 +35,7 @@ export default function AdminDashboard() {
 
   // Filters
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [urgencyFilter, setUrgencyFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState<number | ''>('');
@@ -41,8 +44,17 @@ export default function AdminDashboard() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  // Load complaints and stats
+  // Debounce search input to prevent rapid re-fetching on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Load complaints list
   const loadData = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setLoading(true);
@@ -50,7 +62,7 @@ export default function AdminDashboard() {
       if (statusFilter) path += `status=${statusFilter}&`;
       if (urgencyFilter) path += `urgency=${urgencyFilter}&`;
       if (deptFilter) path += `department_id=${deptFilter}&`;
-      if (search) path += `search=${encodeURIComponent(search)}&`;
+      if (debouncedSearch) path += `search=${encodeURIComponent(debouncedSearch)}&`;
       const data = await api.get<Complaint[]>(path);
       setComplaints(data);
     } catch (err) {
@@ -58,7 +70,7 @@ export default function AdminDashboard() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [statusFilter, urgencyFilter, deptFilter, search]);
+  }, [statusFilter, urgencyFilter, deptFilter, debouncedSearch]);
 
   const loadStats = useCallback(async (showLoading = false) => {
     try {
@@ -96,13 +108,62 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  // Initial dashboard metadata boot (runs once on user mount)
   useEffect(() => {
-    if (user) {
-      loadData(true);
-      loadStats(true);
-      loadDepts();
-    }
+    let active = true;
+    if (!user) return;
+
+    const bootDashboard = async () => {
+      try {
+        setLoading(true);
+        await Promise.all([
+          loadData(false),
+          loadStats(true),
+          loadDepts()
+        ]);
+      } catch (err) {
+        console.error('Failed to boot admin dashboard', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void bootDashboard();
+
+    return () => {
+      active = false;
+    };
   }, [user, loadData, loadStats, loadDepts]);
+
+  // Smooth background update when filters or search change
+  useEffect(() => {
+    let active = true;
+    if (!user) return;
+
+    const fetchFilteredComplaints = async () => {
+      try {
+        let path = '/complaints?';
+        if (statusFilter) path += `status=${statusFilter}&`;
+        if (urgencyFilter) path += `urgency=${urgencyFilter}&`;
+        if (deptFilter) path += `department_id=${deptFilter}&`;
+        if (debouncedSearch) path += `search=${encodeURIComponent(debouncedSearch)}&`;
+        const data = await api.get<Complaint[]>(path);
+        if (active) {
+          setComplaints(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch filtered grievances', err);
+      }
+    };
+
+    void fetchFilteredComplaints();
+
+    return () => {
+      active = false;
+    };
+  }, [user, statusFilter, urgencyFilter, deptFilter, debouncedSearch]);
+
+
 
   // Load comments in background without resetting active drawer form fields
   const loadSelectedComments = useCallback(async (complaintId: string) => {
@@ -135,15 +196,21 @@ export default function AdminDashboard() {
   // Polling for real-time updates (syncs list, stats, and comments)
   useEffect(() => {
     if (!user) return;
+    const complaintId = selectedComplaint?.id;
     const interval = setInterval(() => {
+      // Do not poll background refetches while user is actively typing in an input
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
       loadData(false);
       loadStats(false);
-      if (selectedComplaint) {
-        loadSelectedComments(selectedComplaint.id);
+      if (complaintId) {
+        loadSelectedComments(complaintId);
       }
-    }, 5000);
+    }, 8000);
     return () => clearInterval(interval);
   }, [user, loadData, loadStats, selectedComplaint?.id, loadSelectedComments]);
+
 
   // Submit comment
   const handleAddComment = async (e: React.FormEvent) => {
@@ -216,18 +283,20 @@ export default function AdminDashboard() {
   // Dynamically resolve department details for title rendering
   const activeUserDept = departments.find(d => d.id === user?.department_id);
   const activeDeptName = activeUserDept ? activeUserDept.name : '';
+  const selectedFilterDept = departments.find(d => d.id === deptFilter);
   
   const dashboardTitle = user?.role === 'admin' 
-    ? "Dean's Governance Desk" 
+    ? (selectedFilterDept ? `Dean's Desk: ${selectedFilterDept.name}` : "Dean's Governance Desk")
     : user?.role === 'department_head' && activeDeptName 
     ? `${activeDeptName} Desk` 
     : "Administrative Desk";
 
   const dashboardSubtitle = user?.role === 'admin'
-    ? "Review and monitor campus-wide grievances, automated verification data, and statuses."
+    ? (selectedFilterDept ? `Filtered view showing grievances assigned to the ${selectedFilterDept.name} department.` : "Review and monitor campus-wide grievances, automated verification data, and statuses.")
     : user?.role === 'department_head' && activeDeptName
     ? `Review and resolve grievances assigned to the ${activeDeptName} department.`
     : "Review campus grievances, inspect automated verification data, and route tasks to appropriate departments.";
+
 
   // Filter out automated system/AI logs to preserve clean human-to-human timeline
   const cleanConversationComments = comments.filter(c => {
@@ -265,10 +334,58 @@ export default function AdminDashboard() {
               <h1 className="text-3xl font-extrabold tracking-tight">{dashboardTitle}</h1>
               <p className="text-zinc-400 text-sm mt-1">{dashboardSubtitle}</p>
             </div>
-            <div className="text-xs text-zinc-400 font-semibold font-mono tracking-wider bg-zinc-900 border border-zinc-800 px-4 py-1.5 rounded-full uppercase shadow-sm">
-              {user.role.replace('_', ' ')} clearance
+            <div className="flex items-center space-x-3">
+
+              {(deptFilter !== '' || search !== '' || statusFilter !== '' || urgencyFilter !== '') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeptFilter('');
+                    setSearch('');
+                    setStatusFilter('');
+                    setUrgencyFilter('');
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 text-indigo-400" />
+                  <span>Back to Main Overview</span>
+                </button>
+              )}
+              <div className="text-xs text-zinc-400 font-semibold font-mono tracking-wider bg-zinc-900 border border-zinc-800 px-4 py-1.5 rounded-full uppercase shadow-sm">
+                {user.role.replace('_', ' ')} clearance
+              </div>
             </div>
           </div>
+
+
+          {/* Active Department Filter Banner with Back Option */}
+          {deptFilter !== '' && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 animate-slide-in shadow-xl">
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setDeptFilter('')}
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-xs text-white shadow-lg transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Back to All Departments Overview</span>
+                </button>
+                <div className="text-xs text-zinc-300">
+                  <span className="text-zinc-400">Inspecting Department:</span>{' '}
+                  <strong className="text-white font-bold bg-indigo-900/50 px-2 py-0.5 rounded border border-indigo-500/30">
+                    {departments.find(d => d.id === deptFilter)?.name || `Department #${deptFilter}`}
+                  </strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeptFilter('')}
+                className="text-xs font-semibold text-zinc-400 hover:text-white underline font-mono cursor-pointer"
+              >
+                Clear Filter ✖
+              </button>
+            </div>
+          )}
 
           {/* Analytics Dashboard Grid */}
           {!statsLoading && stats && (
@@ -306,22 +423,43 @@ export default function AdminDashboard() {
                   <span className="text-xs font-bold text-white uppercase tracking-wider">Load by Department</span>
                 </div>
                 <div className="space-y-2">
-                  {stats.department_distribution.slice(0, 4).map((d) => (
-                    <div key={d.department_name} className="space-y-1">
-                      <div className="flex justify-between text-[10px] text-neutral-400">
-                        <span>{d.department_name}</span>
-                        <span className="font-bold text-white">{d.count}</span>
+                  {stats.department_distribution.slice(0, 4).map((d) => {
+                    const matchedDept = departments.find(dept => 
+                      dept.name.toLowerCase().includes(d.department_name.toLowerCase()) || 
+                      d.department_name.toLowerCase().includes(dept.name.toLowerCase()) ||
+                      dept.code.toLowerCase() === d.department_name.toLowerCase()
+                    );
+                    const isSelected = matchedDept && deptFilter === matchedDept.id;
+                    return (
+                      <div 
+                        key={d.department_name} 
+                        onClick={() => {
+                          if (matchedDept) setDeptFilter(matchedDept.id);
+                        }}
+                        className={`space-y-1 p-2 rounded-xl border transition-all ${
+                          matchedDept 
+                            ? 'cursor-pointer hover:bg-zinc-900 hover:border-indigo-500/40' 
+                            : 'border-transparent'
+                        } ${isSelected ? 'bg-indigo-950/60 border-indigo-500/50 shadow-md' : 'border-transparent'}`}
+                      >
+                        <div className="flex justify-between text-[10px] text-neutral-400">
+                          <span className={`font-semibold flex items-center gap-1 ${isSelected ? 'text-indigo-300 font-bold' : 'hover:text-indigo-300'}`}>
+                            {d.department_name} {matchedDept ? <span className="text-[9px] text-indigo-400">➔</span> : ''}
+                          </span>
+                          <span className="font-bold text-white">{d.count}</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-500 rounded-full w-[--bar-width]" 
+                            style={{ '--bar-width': `${stats.total_complaints > 0 ? (d.count / stats.total_complaints) * 100 : 0}%` } as React.CSSProperties}
+                          />
+                        </div>
                       </div>
-                      <div className="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-500 rounded-full w-[--bar-width]" 
-                          style={{ '--bar-width': `${stats.total_complaints > 0 ? (d.count / stats.total_complaints) * 100 : 0}%` } as React.CSSProperties}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
+
 
               {/* Urgency levels */}
               <div className="glass-panel p-5 rounded-xl space-y-3">
@@ -375,6 +513,83 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* Grouped Similar Issues Cluster Panel (Largest Issue Count to Lowest) */}
+          {!statsLoading && stats && stats.grouped_issue_clusters && stats.grouped_issue_clusters.length > 0 && (
+            <div className="glass-panel p-6 rounded-xl space-y-4 border border-zinc-800 bg-zinc-900/30">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Flame className="h-5 w-5 text-amber-400" aria-hidden="true" />
+                  <h3 className="text-base font-bold text-white">Priority Issue Clusters (Ordered: Largest to Lowest)</h3>
+                </div>
+                <span className="text-xs font-mono text-zinc-400">
+                  Total Categories: {stats.grouped_issue_clusters.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {stats.grouped_issue_clusters.map((cluster, idx) => (
+                  <div 
+                    key={cluster.category}
+                    onClick={() => {
+                      setSearch(cluster.category);
+                    }}
+                    className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-indigo-500/50 hover:bg-zinc-900/50 transition-all cursor-pointer space-y-3 relative group"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider block">
+                          Rank #{idx + 1}
+                        </span>
+                        <h4 className="font-bold text-sm text-white group-hover:text-indigo-400 transition-colors">
+                          {cluster.category}
+                        </h4>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        {cluster.count} {cluster.count === 1 ? 'Issue' : 'Issues'}
+                      </span>
+                    </div>
+
+                    {/* Urgency distribution chips */}
+                    <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                      {cluster.critical_count > 0 && (
+                        <span className="px-2 py-0.5 rounded bg-rose-950/50 text-rose-400 border border-rose-800/40">
+                          {cluster.critical_count} Critical
+                        </span>
+                      )}
+                      {cluster.high_count > 0 && (
+                        <span className="px-2 py-0.5 rounded bg-amber-950/50 text-amber-400 border border-amber-800/40">
+                          {cluster.high_count} High
+                        </span>
+                      )}
+                      {cluster.medium_count > 0 && (
+                        <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
+                          {cluster.medium_count} Med
+                        </span>
+                      )}
+                      {cluster.low_count > 0 && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/30">
+                          {cluster.low_count} Low
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Top Locations */}
+                    {cluster.top_locations.length > 0 && (
+                      <div className="text-[10px] text-zinc-400 font-mono truncate">
+                        Loc: {cluster.top_locations.join(', ')}
+                      </div>
+                    )}
+
+                    <div className="text-[10px] font-semibold text-indigo-400 group-hover:underline pt-1">
+                      Click to view all {cluster.count} issues ➔
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
 
           {/* Grievance Desk list registry */}
           <div className="space-y-4">
@@ -530,22 +745,51 @@ export default function AdminDashboard() {
 
       {/* Right Drawer: Administrative Action Panel */}
       {selectedComplaint && (
-        <aside className="fixed inset-y-0 right-0 w-full sm:max-w-lg bg-zinc-950 border-l border-zinc-900 shadow-2xl flex flex-col z-50 animate-slide-in">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-zinc-900 bg-zinc-950">
-            <div>
-              <span className="block text-xs font-mono font-semibold text-indigo-400 tracking-wider">ADMINISTRATIVE ORCHESTRATION</span>
-              <span className="font-bold text-sm truncate max-w-64 block text-white mt-1">{selectedComplaint.title}</span>
+        <>
+          {/* Backdrop Overlay */}
+          <div 
+            onClick={() => setSelectedComplaint(null)} 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity cursor-pointer animate-fade-in"
+            aria-hidden="true"
+          />
+
+          <aside className="fixed inset-y-0 right-0 w-full sm:max-w-lg bg-zinc-950 border-l border-zinc-900 shadow-2xl flex flex-col z-50 animate-slide-in">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-zinc-900 bg-zinc-950">
+              <div>
+                <span className="block text-xs font-mono font-semibold text-indigo-400 tracking-wider">ADMINISTRATIVE ORCHESTRATION</span>
+                <span className="font-bold text-sm truncate max-w-64 block text-white mt-1">{selectedComplaint.title}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedComplaint(null);
+                  }} 
+                  aria-label="Back to Registry List"
+                  title="Back to Registry List"
+                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                  <span>Back</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedComplaint(null);
+                  }} 
+                  aria-label="Close admin action panel drawer"
+                  title="Close admin action panel drawer"
+                  className="p-2 rounded-xl bg-neutral-900 border border-white/5 text-neutral-400 hover:text-white transition-all cursor-pointer"
+                >
+                  <X className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+
             </div>
-            <button 
-              onClick={() => setSelectedComplaint(null)} 
-              aria-label="Close admin action panel drawer"
-              title="Close admin action panel drawer"
-              className="p-2 rounded-xl bg-neutral-900 border border-white/5 text-neutral-400 hover:text-white transition-all"
-            >
-              <X className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
+
 
           {/* Action Dashboard Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -727,40 +971,68 @@ export default function AdminDashboard() {
             {/* Evidence files */}
             {selectedComplaint.attachments && selectedComplaint.attachments.length > 0 && (
               <div className="space-y-4">
-                <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">Evidence Files</span>
+                <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">
+                  Uploaded Proof & Screenshots ({selectedComplaint.attachments.length})
+                </span>
                 <div className="grid grid-cols-1 gap-3">
-                  {selectedComplaint.attachments.map((att) => (
-                    <div key={att.id} className="glass-panel p-4.5 rounded-xl border border-white/5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <a 
-                          href={`http://localhost:8000${att.file_url}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center space-x-2 text-xs font-mono text-indigo-400 hover:text-indigo-300 transition-colors"
-                        >
-                          <ImageIcon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
-                          <span className="font-semibold underline">View Attachment</span>
-                        </a>
-                        <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-md ${
-                          att.ai_verification_status === 'verified' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
-                          att.ai_verification_status === 'rejected' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400' :
-                          'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
-                        }`}>
-                          System Analysis: {att.ai_verification_status}
-                        </span>
+                  {selectedComplaint.attachments.map((att) => {
+                    const fullUrl = `http://localhost:8000${att.file_url}`;
+                    const isImg = att.file_type.startsWith('image/') || att.file_url.endsWith('.png') || att.file_url.endsWith('.jpg') || att.file_url.endsWith('.jpeg') || att.file_url.endsWith('.bmp');
+                    return (
+                      <div key={att.id} className="glass-panel p-4.5 rounded-xl border border-white/5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <a 
+                            href={fullUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center space-x-2 text-xs font-mono text-indigo-400 hover:text-indigo-300 transition-colors"
+                          >
+                            <ImageIcon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
+                            <span className="font-semibold underline">Open Original File</span>
+                          </a>
+                          <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-md ${
+                            att.ai_verification_status === 'verified' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
+                            att.ai_verification_status === 'rejected' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400' :
+                            'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
+                          }`}>
+                            Grok AI Analysis: {att.ai_verification_status}
+                          </span>
+                        </div>
+
+                        {/* Inline Screenshot Thumbnail Preview */}
+                        {isImg && (
+                          <div 
+                            onClick={() => setPreviewImageUrl(fullUrl)}
+                            className="relative group rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 cursor-pointer h-48 flex items-center justify-center"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img 
+                              src={fullUrl} 
+                              alt="Student Uploaded Proof Screenshot" 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="px-3 py-1.5 rounded-lg bg-zinc-900/90 text-white font-bold text-xs shadow">
+                                Click to Expand Screenshot 🔍
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {att.ai_verification_explanation && (
+                          <p className={`text-xs leading-relaxed pl-1 ${
+                            att.ai_verification_status === 'rejected' ? 'text-rose-300' : 'text-neutral-400'
+                          }`}>
+                            {att.ai_verification_explanation}
+                          </p>
+                        )}
                       </div>
-                      {att.ai_verification_explanation && (
-                        <p className={`text-xs leading-relaxed pl-1 ${
-                          att.ai_verification_status === 'rejected' ? 'text-rose-300' : 'text-neutral-400'
-                        }`}>
-                          {att.ai_verification_explanation}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
+
 
             {/* Clean Conversation & Updates timeline */}
             <div className="space-y-4">
@@ -859,7 +1131,52 @@ export default function AdminDashboard() {
             </div>
           )}
         </aside>
+      </>
+      )}
+      {/* Full-Screen High-Resolution Proof Screenshot Modal */}
+      {previewImageUrl && (
+        <div 
+          onClick={() => setPreviewImageUrl(null)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 cursor-pointer animate-fade-in"
+        >
+          <div className="relative max-w-4xl w-full bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden p-2 shadow-2xl space-y-3">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900">
+              <span className="text-xs font-mono font-bold text-indigo-400 uppercase tracking-wider">
+                Student Uploaded Proof Screenshot
+              </span>
+              <button 
+                type="button"
+                onClick={() => setPreviewImageUrl(null)}
+                className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="max-h-[80vh] overflow-auto flex items-center justify-center bg-black/50 rounded-xl p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img 
+                src={previewImageUrl} 
+                alt="Student Proof High Resolution View" 
+                className="max-h-[75vh] w-auto object-contain rounded-lg shadow-xl"
+              />
+            </div>
+            <div className="flex justify-between items-center px-4 py-2 border-t border-zinc-900 text-xs">
+              <a 
+                href={previewImageUrl} 
+                target="_blank" 
+                rel="noreferrer"
+                className="text-indigo-400 font-mono font-semibold underline hover:text-indigo-300"
+              >
+                Open Original Image in New Tab ↗
+              </a>
+              <span className="text-zinc-500 font-mono text-[10px]">
+                Verified by CampusBridge AI Evidence Auditor
+              </span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
+

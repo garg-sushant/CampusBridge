@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import List, Optional
@@ -8,6 +8,8 @@ from app.core.security import get_current_user, require_student, require_staff
 from app.models.base import Complaint, User, Department, Attachment, Comment
 from app.schemas.complaints import ComplaintCreate, ComplaintOut, ComplaintListItem, CommentCreate, CommentOut, ComplaintUpdateStatus
 from app.services.storage import save_uploaded_file
+from app.services.email_service import dispatch_status_update_notification, dispatch_comment_notification
+
 
 router = APIRouter(prefix="/complaints", tags=["Complaints"])
 
@@ -23,7 +25,25 @@ def submit_complaint(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only students and administrators can submit complaints."
         )
-        
+
+    from datetime import datetime, timezone
+
+
+    # Enforce daily quota limit: max 5 issues per student email ID per day
+    now_utc = datetime.now(timezone.utc)
+    start_of_day = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
+    
+    today_count = db.query(Complaint).filter(
+        Complaint.student_id == current_user.id,
+        Complaint.created_at >= start_of_day
+    ).count()
+
+    if today_count >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Daily Submission Limit Reached: Each student can submit a maximum of 5 grievances per day. You have reached your daily quota for today."
+        )
+
     new_complaint = Complaint(
         title=complaint_in.title,
         description=complaint_in.description,
@@ -33,6 +53,7 @@ def submit_complaint(
         status="submitted",
         urgency="medium"  # Defaults to medium, AI or Admin will classify/override
     )
+
     
     db.add(new_complaint)
     db.commit()
@@ -42,11 +63,39 @@ def submit_complaint(
     
     # Trigger AI orchestration & routing
     from app.services.ai_agent import run_ai_orchestration
+    from app.services.engine import run_integrity_assessment_pipeline
+    import re
+
     run_ai_orchestration(new_complaint.id, db)
-    
     db.refresh(new_complaint)
     
+    # Run multi-agent integrity assessment
+    assessment = run_integrity_assessment_pipeline(new_complaint.id, db)
+    integrity_score = assessment.get("integrity_score", 100)
+    
+    # Audit for fake/spam, nonsense patterns, or Integrity Trust Rating < 40%
+    title_desc = (new_complaint.title + " " + new_complaint.description).lower()
+    nonsense_patterns = [r"^asdf", r"^xyz", r"^qwer", r"^test", r"^123", r"^\s*$"]
+    is_nonsense = any(re.search(pattern, title_desc) for pattern in nonsense_patterns)
+    is_too_short = len(new_complaint.description.strip()) < 15
+
+    if new_complaint.status == "rejected" or integrity_score < 40 or is_nonsense or is_too_short:
+        # Remove fake/low-integrity complaint so it is NOT submitted
+        db.delete(new_complaint)
+        db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Submission Rejected: Fake, randomly written, or low-integrity issue detected by AI Credibility Auditor (Integrity Rating: {integrity_score}% < 40%). Please provide a genuine, detailed campus grievance."
+        )
+    else:
+        new_complaint.status = "submitted"
+        db.commit()
+        db.refresh(new_complaint)
+    
     return new_complaint
+
+
 
 @router.post("/{complaint_id}/upload", response_model=List[ComplaintOut])
 def upload_evidence(
@@ -155,17 +204,53 @@ def list_complaints(
     if department_id:
         query = query.filter(Complaint.department_id == department_id)
         
-    # Search title and description
+    # Outer join Department and Student User for comprehensive search capability
+    query = query.outerjoin(Department, Complaint.department_id == Department.id).outerjoin(User, Complaint.student_id == User.id)
+
+    # Search title, description, category, location, student name, department name
     if search:
-        search_filter = or_(
-            Complaint.title.ilike(f"%{search}%"),
-            Complaint.description.ilike(f"%{search}%"),
-            Complaint.location.ilike(f"%{search}%")
+        search_clean = search.strip()
+        search_pattern = f"%{search_clean}%"
+        
+        # If searching by category string with slashes (e.g. "WiFi/IT Services" or "Water & Sanitation")
+        # Split tokens for multi-keyword fuzzy matching
+        tokens = search_clean.replace('/', ' ').replace('&', ' ').split()
+        token_filters = []
+        for t in tokens:
+            if len(t) > 1:
+                tp = f"%{t}%"
+                token_filters.append(
+                    or_(
+                        Complaint.title.ilike(tp),
+                        Complaint.description.ilike(tp),
+                        Complaint.category.ilike(tp),
+                        Complaint.location.ilike(tp),
+                        Complaint.urgency.ilike(tp),
+                        Complaint.status.ilike(tp),
+                        Department.name.ilike(tp),
+                        User.full_name.ilike(tp),
+                    )
+                )
+
+        primary_filter = or_(
+            Complaint.title.ilike(search_pattern),
+            Complaint.description.ilike(search_pattern),
+            Complaint.category.ilike(search_pattern),
+            Complaint.location.ilike(search_pattern),
+            Complaint.urgency.ilike(search_pattern),
+            Complaint.status.ilike(search_pattern),
+            Department.name.ilike(search_pattern),
+            User.full_name.ilike(search_pattern),
         )
-        query = query.filter(search_filter)
+
+        if token_filters:
+            query = query.filter(or_(primary_filter, and_(*token_filters)))
+        else:
+            query = query.filter(primary_filter)
         
     # Order by date desc
     return query.order_by(Complaint.created_at.desc()).all()
+
 
 @router.get("/{complaint_id}", response_model=ComplaintOut)
 def get_complaint_detail(
@@ -215,6 +300,7 @@ def get_complaint_detail(
 def add_comment(
     complaint_id: str,
     comment_in: CommentCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -258,12 +344,25 @@ def add_comment(
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
+
+    # Real-time Email Notification Dispatcher
+    if not comment_in.is_internal and current_user.role != "student" and complaint.student:
+        background_tasks.add_task(
+            dispatch_comment_notification,
+            recipient_email=complaint.student.email,
+            recipient_name=complaint.student.full_name,
+            complaint_title=complaint.title,
+            comment_author=current_user.full_name,
+            comment_content=comment_in.content
+        )
+
     return new_comment
 
 @router.patch("/{complaint_id}/status", response_model=ComplaintOut)
 def update_complaint_status(
     complaint_id: str,
     update_in: ComplaintUpdateStatus,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
@@ -286,13 +385,26 @@ def update_complaint_status(
                 )
             
     changes = []
+    user_friendly_sentences = []
+    old_status = complaint.status
     
     if update_in.status and update_in.status != complaint.status:
-        changes.append(f"status updated from '{complaint.status}' to '{update_in.status}'")
+        formatted_status = update_in.status.replace('_', ' ').title()
+        changes.append(f"Status updated to '{formatted_status}'")
+        if update_in.status == "resolved":
+            user_friendly_sentences.append(f"Your grievance has been marked as Resolved by {current_user.full_name}.")
+        elif update_in.status == "in_progress":
+            user_friendly_sentences.append(f"Your grievance is now under active work by {current_user.full_name}.")
+        elif update_in.status == "rejected":
+            user_friendly_sentences.append(f"Your grievance was reviewed and marked as Rejected by {current_user.full_name}.")
+        else:
+            user_friendly_sentences.append(f"Status updated to {formatted_status} by {current_user.full_name}.")
         complaint.status = update_in.status
         
     if update_in.urgency and update_in.urgency != complaint.urgency:
-        changes.append(f"urgency adjusted from '{complaint.urgency}' to '{update_in.urgency}'")
+        formatted_urgency = update_in.urgency.replace('_', ' ').title()
+        changes.append(f"Urgency updated to '{formatted_urgency}'")
+        user_friendly_sentences.append(f"Priority level adjusted to {formatted_urgency} by {current_user.full_name}.")
         complaint.urgency = update_in.urgency
         
     if update_in.department_id is not None and update_in.department_id != complaint.department_id:
@@ -302,13 +414,9 @@ def update_complaint_status(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Target department does not exist."
             )
-        old_dept_name = complaint.department.name if complaint.department else "Unassigned"
-        changes.append(f"assigned department changed from '{old_dept_name}' to '{dept.name}'")
+        changes.append(f"Assigned to '{dept.name}'")
+        user_friendly_sentences.append(f"Grievance assigned to {dept.name} by {current_user.full_name}.")
         complaint.department_id = update_in.department_id
-        
-    if update_in.is_duplicate is not None:
-        complaint.is_duplicate = update_in.is_duplicate
-        changes.append(f"duplicate flag updated to {update_in.is_duplicate}")
         
     if update_in.duplicate_of_id is not None:
         if update_in.duplicate_of_id == complaint.id:
@@ -324,18 +432,36 @@ def update_complaint_status(
             )
         complaint.duplicate_of_id = update_in.duplicate_of_id
         complaint.is_duplicate = True
-        changes.append(f"linked as duplicate of complaint: {target.title}")
+        changes.append(f"Linked to related grievance: {target.title}")
+        user_friendly_sentences.append(f"Linked to existing case: '{target.title}'.")
+    elif update_in.is_duplicate is False and complaint.is_duplicate:
+        complaint.is_duplicate = False
         
-    if changes:
-        audit_trail = "; ".join(changes)
+    if user_friendly_sentences:
+        friendly_message = " ".join(user_friendly_sentences)
         system_comment = Comment(
             complaint_id=complaint.id,
-            content=f"Administrative Action: {audit_trail} (Updated by {current_user.full_name}).",
-            is_internal=True,
+            content=f"Official Update: {friendly_message}",
+            is_internal=False,
             is_ai_generated=False
         )
         db.add(system_comment)
+
+        # Dispatch real-time email to student's Gmail/Email in background
+        if complaint.student:
+            background_tasks.add_task(
+                dispatch_status_update_notification,
+                student_email=complaint.student.email,
+                student_name=complaint.student.full_name,
+                complaint_title=complaint.title,
+                complaint_id=complaint.id,
+                new_status=complaint.status,
+                updated_by=current_user.full_name,
+                changes_summary=friendly_message
+            )
         
     db.commit()
     db.refresh(complaint)
     return complaint
+
+

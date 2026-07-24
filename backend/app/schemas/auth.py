@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -18,8 +18,8 @@ class UserOut(UserBase):
     trust_score: float
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class Token(BaseModel):
     access_token: str
@@ -29,3 +29,12 @@ class TokenData(BaseModel):
     email: Optional[str] = None
     role: Optional[str] = None
     user_id: Optional[int] = None
+
+class GoogleLoginRequest(BaseModel):
+    email: EmailStr
+    id_token: Optional[str] = None
+    full_name: Optional[str] = None
+    role: Optional[str] = "student"
+    department_id: Optional[int] = None
+
+

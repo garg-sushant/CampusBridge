@@ -56,11 +56,17 @@ export default function LoginPage() {
   };
 
   // Google Account verification and Sign-In handler
-  const handleGoogleAccountSelect = async (targetEmail: string) => {
+  const handleGoogleAccountSelect = async (targetEmail: string, explicitRole?: string) => {
     setGoogleLoading(true);
     setGoogleError(null);
     try {
-      await loginWithGoogle(targetEmail);
+      let roleToUse = explicitRole;
+      if (!roleToUse) {
+        if (selectedRole === 'admin') roleToUse = 'admin';
+        else if (selectedRole === 'dept') roleToUse = 'department_head';
+        else roleToUse = 'student';
+      }
+      await loginWithGoogle(targetEmail, roleToUse);
       setGoogleModalOpen(false);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Google sign-in failed.';
@@ -69,6 +75,7 @@ export default function LoginPage() {
       setGoogleLoading(false);
     }
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,18 +411,19 @@ export default function LoginPage() {
             {/* Accounts list */}
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {[
-                { email: 'student@campus.edu', name: 'Amit Patel', desc: 'Student' },
-                { email: 'ithead@campus.edu', name: 'Prof. Rajesh Sharma', desc: 'IT Head' },
-                { email: 'hostelhead@campus.edu', name: 'Dr. Sunita Rao', desc: 'Hostel Warden' },
-                { email: 'admin@campus.edu', name: 'Dean of Campus Governance', desc: 'Dean (Admin)' }
+                { email: 'student@campus.edu', name: 'Amit Patel', desc: 'Student', role: 'student' },
+                { email: 'ithead@campus.edu', name: 'Prof. Rajesh Sharma', desc: 'IT Head', role: 'department_head' },
+                { email: 'hostelhead@campus.edu', name: 'Dr. Sunita Rao', desc: 'Hostel Warden', role: 'department_head' },
+                { email: 'admin@campus.edu', name: 'Dean of Campus Governance', desc: 'Dean (Admin)', role: 'admin' }
               ].map((acc) => (
                 <button
                   key={acc.email}
                   type="button"
                   disabled={googleLoading}
-                  onClick={() => handleGoogleAccountSelect(acc.email)}
+                  onClick={() => handleGoogleAccountSelect(acc.email, acc.role)}
                   className="w-full flex items-center space-x-3 p-3 rounded-xl border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 hover:bg-zinc-900 transition-all text-left cursor-pointer group"
                 >
+
                   <div className="h-8 w-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 font-bold text-xs group-hover:bg-indigo-600 group-hover:text-white transition-all">
                     {acc.name.charAt(0)}
                   </div>

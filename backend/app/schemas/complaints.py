@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from app.schemas.auth import UserOut
@@ -13,8 +13,7 @@ class AttachmentOut(BaseModel):
     ai_verification_explanation: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CommentCreate(BaseModel):
     content: str
@@ -29,8 +28,7 @@ class CommentOut(BaseModel):
     created_at: datetime
     user: Optional[UserOut] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ComplaintBase(BaseModel):
     title: str = Field(..., max_length=255)
@@ -42,7 +40,7 @@ class ComplaintCreate(ComplaintBase):
     pass
 
 class ComplaintUpdateStatus(BaseModel):
-    status: str
+    status: Optional[str] = None
     department_id: Optional[int] = None
     urgency: Optional[str] = None
     is_duplicate: Optional[bool] = None
@@ -64,8 +62,7 @@ class ComplaintOut(ComplaintBase):
     attachments: List[AttachmentOut] = []
     comments: List[CommentOut] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ComplaintListItem(ComplaintBase):
     id: str
@@ -80,5 +77,5 @@ class ComplaintListItem(ComplaintBase):
     department: Optional[DepartmentOut] = None
     attachments: List[AttachmentOut] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+

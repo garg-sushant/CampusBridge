@@ -1,7 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '@/types';
 import { api } from '@/lib/api';
 
@@ -10,11 +9,12 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: (email: string) => Promise<void>;
+  loginWithGoogle: (email: string, role?: string, departmentId?: number, idToken?: string) => Promise<void>;
   logout: () => void;
   register: (email: string, full_name: string, password: string, role?: string, departmentId?: number) => Promise<void>;
   refreshUser: () => Promise<void>;
 }
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -22,9 +22,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const token = sessionStorage.getItem('token');
       if (!token) {
@@ -45,11 +44,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    refreshUser();
+    let isMounted = true;
+    const fetchUserSession = async () => {
+      try {
+        const token = sessionStorage.getItem('token');
+        if (!token) {
+          if (isMounted) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+        const userData = await api.get<User>('/auth/me');
+        if (isMounted) setUser(userData);
+      } catch (err) {
+        console.error('Failed to load user session:', err);
+        const isNetworkError = err instanceof TypeError || (err instanceof Error && err.name === 'AbortError');
+        if (!isNetworkError) {
+          sessionStorage.removeItem('token');
+        }
+        if (isMounted) setUser(null);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    fetchUserSession();
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+
 
   // Detect duplicated tab and perform a clean single reload to refresh client state
   useEffect(() => {
@@ -96,11 +124,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithGoogle = async (email: string) => {
+  const loginWithGoogle = async (email: string, role?: string, departmentId?: number, idToken?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.googleLogin(email);
+      const data = await api.googleLogin(email, role, departmentId, idToken);
       sessionStorage.setItem('token', data.access_token);
       
       // Load user profile
@@ -121,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
   };
+
 
   const register = async (
     email: string, 

@@ -1,13 +1,13 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 
 # Input Schema for Grievance Submission
 class ComplaintSubmit(BaseModel):
-    title: str = Field(..., min_length=5, max_length=255, example="Water leakage in Canteen mess area")
-    description: str = Field(..., min_length=15, example="Continuous dripping ceiling leakage is causing slippery floors...")
-    category: str = Field(..., example="Water & Sanitation")
-    location: str = Field(..., example="Ground Floor Restroom")
+    title: str = Field(..., min_length=5, max_length=255, json_schema_extra={"example": "Water leakage in Canteen mess area"})
+    description: str = Field(..., min_length=15, json_schema_extra={"example": "Continuous dripping ceiling leakage is causing slippery floors..."})
+    category: str = Field(..., json_schema_extra={"example": "Water & Sanitation"})
+    location: str = Field(..., json_schema_extra={"example": "Ground Floor Restroom"})
     attachments: Optional[List[str]] = Field(default=[], description="List of visual/document file URLs")
 
 # Structured JSON response templates parsed from Grok API
@@ -46,5 +46,5 @@ class AuditTrailOut(BaseModel):
     notes: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+

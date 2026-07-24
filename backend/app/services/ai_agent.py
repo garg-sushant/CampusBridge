@@ -4,7 +4,8 @@ import math
 import httpx
 import json
 from sqlalchemy.orm import Session
-from app.models.base import Complaint, Department, Comment, Attachment, User
+from app.core.config import settings
+from app.models.base import Complaint, Department, Comment, Attachment, User, TrustScoreHistory
 
 
 def run_ai_orchestration(complaint_id: str, db: Session):
@@ -23,10 +24,12 @@ def run_ai_orchestration(complaint_id: str, db: Session):
 
     # 1. Analyze user input using Grok API if key is set
     grok_result = None
-    api_key = os.getenv("GROK_API_KEY")
+    api_key = settings.GROK_API_KEY or settings.CHATGROK_API_KEY or os.getenv("GROK_API_KEY") or os.getenv("CHATGROK_API_KEY")
+    if api_key and "your_actual_api_key_here" in api_key:
+        api_key = ""
     if api_key:
         try:
-            url = "https://api.x.ai/v1/chat/completions"
+            url = f"{settings.GROK_API_URL or 'https://api.x.ai/v1'}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -62,7 +65,7 @@ def run_ai_orchestration(complaint_id: str, db: Session):
                 f"}}"
             )
             payload = {
-                "model": "grok-beta",
+                "model": settings.GROK_MODEL or "grok-beta",
                 "messages": [
                     {
                         "role": "system",
@@ -98,6 +101,15 @@ def run_ai_orchestration(complaint_id: str, db: Session):
 
         old_score = student.trust_score
         student.trust_score = max(0.0, min(100.0, student.trust_score + trust_adj))
+
+        if trust_adj != 0.0:
+            db.add(TrustScoreHistory(
+                user_id=student.id,
+                previous_score=old_score,
+                new_score=student.trust_score,
+                delta=trust_adj,
+                reason=f"AI orchestration analysis: {grok_result.get('explanation', 'Grievance audited by Grok AI Orchestrator.')[:450]}"
+            ))
 
         dept_code = grok_result.get("department", "").upper()
         assigned_dept = (
@@ -176,6 +188,14 @@ def run_ai_orchestration(complaint_id: str, db: Session):
         trust_adj = -10.0
         student.trust_score = max(0.0, student.trust_score + trust_adj)
 
+        db.add(TrustScoreHistory(
+            user_id=student.id,
+            previous_score=old_score,
+            new_score=student.trust_score,
+            delta=trust_adj,
+            reason="AI Local Audit: Rejected as spam, gibberish, or description too short."
+        ))
+
         ai_class_comment = Comment(
             complaint_id=complaint.id,
             content=(
@@ -198,6 +218,15 @@ def run_ai_orchestration(complaint_id: str, db: Session):
             trust_adj = 1.0
 
         student.trust_score = min(100.0, student.trust_score + trust_adj)
+
+        if trust_adj != 0.0:
+            db.add(TrustScoreHistory(
+                user_id=student.id,
+                previous_score=old_score,
+                new_score=student.trust_score,
+                delta=trust_adj,
+                reason=f"AI Local Audit: Detailed report submission (+{trust_adj} trust score)."
+            ))
 
         routing_rules = {
             "HOSTEL": [
@@ -397,10 +426,12 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
     file_name = attachment.file_url.lower()
 
     # 1. Analyze evidence upload using Grok API if key is set
-    api_key = os.getenv("GROK_API_KEY")
+    api_key = settings.GROK_API_KEY or settings.CHATGROK_API_KEY or os.getenv("GROK_API_KEY") or os.getenv("CHATGROK_API_KEY")
+    if api_key and "your_actual_api_key_here" in api_key:
+        api_key = ""
     if api_key:
         try:
-            url = "https://api.x.ai/v1/chat/completions"
+            url = f"{settings.GROK_API_URL or 'https://api.x.ai/v1'}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -413,27 +444,32 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
                 f"Grievance Description: {complaint.description}\n"
                 f"Uploaded Proof Filename/URL: {attachment.file_url}\n\n"
                 f"INSTRUCTIONS FOR EVALUATION:\n"
-                f"Analyze the relationship between the student's reported grievance description (user input) and their uploaded evidence file details (proof). Determine the credibility and calculate a precise 'trust_score_adjustment' based on the following exact grading rubric:\n\n"
+                f"Analyze the relationship between the student's reported grievance description (user input) and their uploaded evidence file details (proof). Determine the credibility, calculate a precise 'trust_score_adjustment', and assign an updated 'urgency' score based on this exact rubric:\n\n"
                 f"CRITERIA 1: EVIDENCE STATUS (Choose either 'verified' or 'rejected')\n"
                 f"- Set status to 'rejected' if the filename suggests a suspicious placeholder (e.g. meme, selfie, test, generic, avatar, profile, dummy, logo, placeholder, blank).\n"
                 f"- Set status to 'verified' if the file is standard/credible proof of the reported complaint.\n\n"
-                f"CRITERIA 2: TRUST SCORE ADJUSTMENT RUBRIC (Must be a float between -10.0 and +5.0):\n"
+                f"CRITERIA 2: URGENCY LEVEL RATING (Choose EXACTLY one: 'critical', 'high', 'medium', 'low')\n"
+                f"- 'critical': Safety hazard, structural damage, water flooding, exposed live wires, broken emergency locks, or bio-hazards.\n"
+                f"- 'high': Severe service outage, power circuit tripping, major water leak, fee payment block during deadlines.\n"
+                f"- 'medium': Standard maintenance issues, non-blocking WiFi drops, general scholarship query.\n"
+                f"- 'low': Minor suggestions, feedback, textbook availability, non-urgent routine requests.\n\n"
+                f"CRITERIA 3: TRUST SCORE ADJUSTMENT RUBRIC (Must be a float between -10.0 and +5.0):\n"
                 f"If STATUS is 'rejected' (Spam, fake, or unrelated proof):\n"
-                f"  - Allocate -10.0: If the filename is an obvious malicious mock/spam placeholder (e.g. meme.jpg, blank.png, test.pdf, generic.jpg) that wastes administrative resources.\n"
-                f"  - Allocate -5.0: If the proof is completely irrelevant to the report description (e.g. a selfie.jpg uploaded for a broken water pipe description).\n"
-                f"  - Allocate -3.0: If the proof is highly ambiguous or generic.\n"
+                f"  - Allocate -10.0: If the filename is an obvious malicious mock/spam placeholder (e.g. meme.jpg, blank.png, test.pdf, generic.jpg).\n"
+                f"  - Allocate -5.0: If the proof is completely irrelevant to the report description.\n"
                 f"If STATUS is 'verified' (Valid, matching proof):\n"
-                f"  - Allocate +5.0: Highly detailed, comprehensive, logical grievance description (e.g. including timestamps, exact campus rooms/hostel block details) backed by a matching timestamped proof document/photograph.\n"
+                f"  - Allocate +5.0: Highly detailed grievance description backed by matching proof.\n"
                 f"  - Allocate +3.0: Standard, consistent grievance description with matching visual evidence.\n"
-                f"  - Allocate +1.0: Very brief or minimal description, but the visual evidence filename still aligns correctly with the reported issue.\n\n"
+                f"  - Allocate +1.0: Minimal description, but visual proof still aligns with the reported issue.\n\n"
                 f"Respond with a JSON object containing:\n"
                 f'1. "status": "verified" or "rejected"\n'
-                f'2. "trust_score_adjustment": float_value\n'
-                f'3. "explanation": "A comprehensive and rigorous justification detailing your score calculations step-by-step based on the criteria."\n'
+                f'2. "urgency": "critical", "high", "medium", or "low"\n'
+                f'3. "trust_score_adjustment": float_value\n'
+                f'4. "explanation": "A comprehensive and rigorous justification detailing your authenticity audit and urgency score."\n'
                 f"Return ONLY the JSON object. Do not include markdown code block formatting."
             )
             payload = {
-                "model": "grok-beta",
+                "model": settings.GROK_MODEL or "grok-beta",
                 "messages": [
                     {
                         "role": "system",
@@ -461,6 +497,9 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
                 data = json.loads(content)
                 status_val = data.get("status", "verified").lower()
                 explanation = data.get("explanation", "Evidence processed by Grok AI.")
+                detected_urgency = data.get("urgency", complaint.urgency).lower()
+                if detected_urgency in ["critical", "high", "medium", "low"]:
+                    complaint.urgency = detected_urgency
 
                 # Retrieve and safely clamp the trust score adjustment
                 trust_adj = float(data.get("trust_score_adjustment", 2.0))
@@ -471,6 +510,15 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
                     0.0, min(100.0, student.trust_score + trust_adj)
                 )
 
+                if trust_adj != 0.0:
+                    db.add(TrustScoreHistory(
+                        user_id=student.id,
+                        previous_score=old_score,
+                        new_score=student.trust_score,
+                        delta=trust_adj,
+                        reason=f"AI Evidence Audit on file '{attachment.file_url}': {explanation[:450]}"
+                    ))
+
                 attachment.ai_verification_status = status_val
                 attachment.ai_verification_explanation = (
                     f"Grok-AI Auditor: {explanation}"
@@ -478,7 +526,7 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
 
                 ai_comment = Comment(
                     complaint_id=complaint.id,
-                    content=f"Grok-AI Audit on file '{attachment.file_url}':\n- Status: {status_val.upper()}\n- Trust Adjustment: {trust_adj:+.1f}% (Integrity: {old_score:.1f}% ➔ {student.trust_score:.1f}%)\n- Explanation: {explanation}",
+                    content=f"Grok-AI Audit on file '{attachment.file_url}':\n- Status: {status_val.upper()}\n- Verified Urgency Rating: {complaint.urgency.upper()}\n- Trust Adjustment: {trust_adj:+.1f}% (Integrity: {old_score:.1f}% ➔ {student.trust_score:.1f}%)\n- Explanation: {explanation}",
                     is_internal=True,
                     is_ai_generated=True,
                 )
@@ -515,6 +563,14 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
 
         student.trust_score = max(0.0, student.trust_score + trust_adj)
 
+        db.add(TrustScoreHistory(
+            user_id=student.id,
+            previous_score=old_score,
+            new_score=student.trust_score,
+            delta=trust_adj,
+            reason=f"AI Local Evidence Audit: Flagged generic graphic/placeholder file '{attachment.file_url}'."
+        ))
+
         ai_alert_comment = Comment(
             complaint_id=complaint.id,
             content=f"AI Security Monitor [Audit Failure]:\n- Flagged File: {attachment.file_url}\n- Trust Adjustment: {trust_adj:+.1f}% (Integrity: {old_score:.1f}% ➔ {student.trust_score:.1f}%)",
@@ -536,6 +592,15 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
             trust_adj = 1.0  # Low detail/minimal submission
 
         student.trust_score = min(100.0, student.trust_score + trust_adj)
+
+        if trust_adj != 0.0:
+            db.add(TrustScoreHistory(
+                user_id=student.id,
+                previous_score=old_score,
+                new_score=student.trust_score,
+                delta=trust_adj,
+                reason=f"AI Local Evidence Audit: Verified evidence file '{attachment.file_url}'."
+            ))
 
         ai_success_comment = Comment(
             complaint_id=complaint.id,

@@ -7,18 +7,21 @@ import { api } from '@/lib/api';
 import { Complaint, Comment } from '@/types';
 import Navbar from '@/components/Navbar';
 import { 
-  Plus, Search, Filter, LogOut, CheckCircle2, AlertTriangle, 
+  Plus, Search, Filter, CheckCircle2, AlertTriangle, 
   MapPin, HelpCircle, FileText, Send, ChevronRight, X, Image as ImageIcon
 } from 'lucide-react';
 
 export default function StudentDashboard() {
-  const { user, logout, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [commentLoading, setCommentLoading] = useState(false);
@@ -41,13 +44,21 @@ export default function StudentDashboard() {
     return true;
   });
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   // Fetch complaints
   const loadComplaints = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setLoading(true);
       let path = '/complaints?';
       if (statusFilter) path += `status=${statusFilter}&`;
-      if (search) path += `search=${encodeURIComponent(search)}&`;
+      if (debouncedSearch) path += `search=${encodeURIComponent(debouncedSearch)}&`;
       const data = await api.get<Complaint[]>(path);
       setComplaints(data);
     } catch (err) {
@@ -55,12 +66,18 @@ export default function StudentDashboard() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [statusFilter, search]);
+  }, [statusFilter, debouncedSearch]);
 
   useEffect(() => {
+    let isMounted = true;
     if (user) {
-      loadComplaints(true);
+      (async () => {
+        if (isMounted) await loadComplaints(true);
+      })();
     }
+    return () => {
+      isMounted = false;
+    };
   }, [user, loadComplaints]);
 
   // Fetch single complaint details including comments
@@ -84,14 +101,19 @@ export default function StudentDashboard() {
   // Polling for real-time updates (syncs dashboard and open timeline drawer)
   useEffect(() => {
     if (!user) return;
+    const complaintId = selectedComplaint?.id;
     const interval = setInterval(() => {
-      loadComplaints(false);
-      if (selectedComplaint) {
-        loadSelectedDetails(selectedComplaint.id, false);
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        return;
       }
-    }, 5000);
+      loadComplaints(false);
+      if (complaintId) {
+        loadSelectedDetails(complaintId, false);
+      }
+    }, 8000);
     return () => clearInterval(interval);
   }, [user, loadComplaints, selectedComplaint?.id, loadSelectedDetails]);
+
 
   // Submit a public comment
   const handleAddComment = async (e: React.FormEvent) => {

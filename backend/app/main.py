@@ -7,34 +7,42 @@ from app.core.database import engine, Base
 from app.services.storage import ensure_upload_dir
 from app.api import auth, departments, complaints, admin, assessment
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    # Ensure database tables exist
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Warning: Automatic DB table creation failed on startup: {e}")
+
+    # Establish storage structures
+    upload_path = ensure_upload_dir()
+    
+    # Mount static resource routing for evidence files
+    app_instance.mount("/static/uploads", StaticFiles(directory=upload_path), name="uploads")
+    yield
+
 # Instantiate FastAPI application
 app = FastAPI(
     title="Smart Campus Governance & Grievance Verification API",
     description="Backend workflow automation engine with state management and role-based permissions.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Setup CORS for frontend decouple development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Set to specific domains in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Ensure database tables exist
-from app.models import base
-Base.metadata.create_all(bind=engine)
 
-# Startup DB initialisation and upload folder check
-@app.on_event("startup")
-def startup_event():
-    # Establish storage structures
-    upload_path = ensure_upload_dir()
-    
-    # Mount static resource routing for evidence files
-    app.mount("/static/uploads", StaticFiles(directory=upload_path), name="uploads")
+
 
 # Include Router Modules
 app.include_router(auth.router, prefix="/api")
@@ -50,3 +58,13 @@ def read_root():
         "service": "Smart Campus Governance Workflow Engine",
         "documentation": "/docs"
     }
+
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "CampusBridge Governance API",
+        "version": "1.0.0"
+    }
+

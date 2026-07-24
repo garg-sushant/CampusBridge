@@ -1,6 +1,6 @@
-const BASE_URL = typeof window !== 'undefined' 
-  ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api') 
-  : 'http://localhost:8000/api';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const BASE_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+
 
 function getAuthToken(): string | null {
   if (typeof window !== 'undefined') {
@@ -138,13 +138,18 @@ export const api = {
   },
 
   // Google Login payload handler
-  googleLogin: async (email: string): Promise<{ access_token: string; token_type: string }> => {
+  googleLogin: async (email: string, role?: string, departmentId?: number, idToken?: string): Promise<{ access_token: string; token_type: string }> => {
     const response = await fetch(`${BASE_URL}/auth/google`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({
+        email,
+        role: role || 'student',
+        department_id: departmentId || null,
+        id_token: idToken || null,
+      }),
     });
 
     if (!response.ok) {
@@ -159,3 +164,4 @@ export const api = {
     return response.json() as Promise<{ access_token: string; token_type: string }>;
   }
 };
+

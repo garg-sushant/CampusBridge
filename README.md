@@ -1,135 +1,139 @@
-# CampusBridge – Campus Grievance & Governance Portal
+# CampusBridge – Smart Campus Grievance & Governance Portal
 
-CampusBridge is a full-stack, AI-powered institutional governance and redressal portal built for modern universities. It streamlines campus-wide operations by triaging, routing, verifying, and resolving student-filed institutional grievances transparently and officially.
-
----
-
-## 🏛️ Project Architecture & Components
-
-The workspace is organized into two primary segments:
-1. **`backend/`**: A high-performance REST API service built with **FastAPI**, **SQLAlchemy**, and SQLite, featuring an agentic xAI Grok LLM triaging connector and safety evidence vision audits.
-2. **`frontend/`**: A modern user interface built using **Next.js (App Router)**, **React 19**, **TypeScript**, and **TailwindCSS**, utilizing HSL color palettes and glassmorphism.
+CampusBridge is a full-stack, AI-powered institutional governance and redressal platform built for modern universities. It streamlines campus-wide operations by triaging, routing, verifying, and resolving student-filed grievances transparently and officially.
 
 ---
 
-## 🤖 Grok LLM / ChatGrok AI Agent Integration
+## 🏛️ Technology Stack & Architecture
 
-CampusBridge features a fully integrated **xAI Grok / ChatGrok** AI agent pipeline in `backend/app/services/ai_agent.py`. 
-
-### Agentic Capabilities:
-- **Intelligent Classification & Routing:** Replaces keyword rules with advanced semantic understanding. Grok reads student grievance descriptions and returns a structured JSON payload identifying the precise department code and classification justification.
-- **Urgency & Severity Evaluation:** Analyzes complaints to dynamically escalate severity (`critical`, `high`, `medium`, `low`) for rapid safety responses.
-- **Evidence Audit Verification:** Inspects uploaded files to reject mock placeholders, generic graphics, or selfies, actively updating student credibility ratings (-5% trust rating on spam, +2% credit on verified maintenance photos).
-- **Graceful Offline Fallback:** If no API key is configured, the system automatically falls back to local offline TF-IDF/heuristic matching rules, maintaining seamless local and test suite operations.
+- **Backend**: **Python 3.11**, **FastAPI**, **SQLAlchemy ORM**, **SQLite / PostgreSQL Database**, **Pytest**.
+- **Frontend**: **Next.js (App Router)**, **React 19**, **TypeScript**, **NextAuth.js (Google OAuth & Credentials)**, **TailwindCSS**, Glassmorphic Design System.
+- **AI Engine**: **xAI Grok / ChatGrok LLM Pipeline** (`grok-beta`) for automated grievance triaging, urgency level scoring (`critical`, `high`, `medium`, `low`), and multi-agent integrity credibility audits.
+- **Realtime Notifications**: **Gmail / SMTP Background Email Dispatcher** (`BackgroundTasks` + HTML Templates) and live portal timeline updates.
 
 ---
 
-## ⚙️ Environment Variables Setup
+## 🤖 AI Agent Capabilities & Anti-Spam Safeguards
 
-### Backend Configurations (`backend/.env`)
-Create a `.env` file inside the `backend/` directory or copy the provided `backend/.env.example`:
+1. **Pre-Submission AI Evaluation**: Synchronously audits issue descriptions. Submissions detected as fake, randomly written (e.g. `asdf`, `test`), or scoring an **Integrity Trust Rating < 40%** are immediately blocked and purged from the portal without being stored.
+2. **Daily Submission Quota Limit**: Restricts each student email ID to a maximum of **5 grievance submissions per calendar day** to prevent spamming and abuse.
+3. **Intelligent Classification & Routing**: Reads student grievance descriptions and routes claims instantly to the responsible department (Hostel, IT, Electrical, Water, Transport, Finance, Academic, Canteen, Library).
+4. **Authenticity & Proof Verification**: Audits uploaded evidence photos/PDFs against report descriptions, penalizing fake placeholders (`-10.0%` trust score) and crediting verified proof (`+5.0%`).
+5. **Dynamic Urgency Rating**: Automatically evaluates safety hazards and escalates urgency levels (**`CRITICAL`**, **`HIGH`**, **`MEDIUM`**, **`LOW`**).
+6. **Dean's Priority Issue Clusters & Department Desks**: Groups campus issues into department desks with one-click back navigation for executive oversight.
+
+---
+
+## 🔑 Demo Account Credentials
+
+The platform includes pre-configured accounts for the Dean of Campus Governance, Department Heads, and Students:
+
+| Department / Role | Email Address | Password | Clearance Level |
+| :--- | :--- | :--- | :--- |
+| **Dean of Campus Governance** | `admin@campus.edu` | `adminpassword` | Dean / System Admin |
+| **Hostel Administration** | `hostelhead@campus.edu` | `hostelpassword` | Department Head |
+| **WiFi/IT Services** | `ithead@campus.edu` | `itpassword` | Department Head |
+| **Electrical Maintenance** | `electricalhead@campus.edu` | `electricalpassword` | Department Head |
+| **Water & Sanitation** | `waterhead@campus.edu` | `waterpassword` | Department Head |
+| **Transport Department** | `transporthead@campus.edu` | `transportpassword` | Department Head |
+| **Finance/Scholarship Cell** | `financehead@campus.edu` | `financepassword` | Department Head |
+| **Academic Administration** | `academichead@campus.edu` | `academicpassword` | Department Head |
+| **Canteen Management** | `canteenhead@campus.edu` | `canteenpassword` | Department Head |
+| **Library Management** | `libraryhead@campus.edu` | `librarypassword` | Department Head |
+| **Student Account (Demo)** | `student@campus.edu` | `studentpassword` | Student Clearance |
+
+---
+
+## ⚙️ Environment Configurations
+
+### 1. Backend Environment (`backend/.env`)
+Copy `backend/.env.example` to `backend/.env` and update values:
 ```ini
-# Database connection URL
+# Database Connection URL (SQLite default or PostgreSQL)
 DATABASE_URL=sqlite:///./campus_governance.db
 
-# JWT Security Configurations
-SECRET_KEY=9a15f02c6114b30bccebe7d4ad22a00c7db5204ef971cdfb1c557fa678d45391
+# JWT Security (Generate using: openssl rand -hex 32)
+SECRET_KEY=your_secret_key_here
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# Local server upload directory for evidence files
+# Google OAuth Credentials
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+
+# Upload Directory
 UPLOAD_DIR=uploads
 
-# xAI Grok / ChatGrok LLM Integration Settings
-# Enter your Grok developer API key (console.x.ai) below to activate the live LLM agent:
-GROK_API_KEY=your_chatgrok_api_key_here
+# Grok LLM Settings (console.x.ai)
+GROK_API_KEY=your_grok_api_key_here
 CHATGROK_API_KEY=your_chatgrok_api_key_here
 GROK_API_URL=https://api.x.ai/v1
 GROK_MODEL=grok-beta
+
+# Realtime Gmail SMTP Email Dispatcher Settings
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_gmail_address@gmail.com
+SMTP_PASSWORD=your_gmail_app_password
+SMTP_FROM_NAME=CampusBridge Governance Portal
 ```
 
-### Frontend Configurations (`frontend/.env.local`)
-Create a `.env.local` file inside the `frontend/` directory or copy `frontend/.env.example`:
+### 2. Frontend Environment (`frontend/.env.local`)
+Copy `frontend/.env.example` to `frontend/.env.local`:
 ```ini
-# URL pointing to the FastAPI backend API service
 NEXT_PUBLIC_API_URL=http://localhost:8000/api
+
+# Google OAuth & NextAuth Configuration
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your_nextauth_secret_here
 ```
 
 ---
 
-## 🚀 Step-by-Step Installation & Startup
+## 🚀 Installation & Local Development
 
-### 1. Backend Service Setup
-First, navigate to the `backend/` directory, set up your Python virtual environment, install dependencies, and seed default governance data.
-
+### 1. Backend Service
 ```bash
 cd backend
 
-# Create virtual environment
+# Create & activate Python virtual environment
 python -m venv venv
+.\venv\Scripts\Activate.ps1   # Windows PowerShell (or source venv/bin/activate on Linux/Mac)
 
-# Activate virtual environment (Windows Powershell)
-.\venv\Scripts\Activate.ps1
-
-# Install requirements
+# Install dependencies
 pip install -r requirements.txt
 
-# Create tables & seed institutional data (Default students, IT head, Warden, Dean)
-python seed.py
+# Seed Database with sample complaints across departments
+python seed.py --reset
 
-# Launch development server (Runs on http://localhost:8000)
+# Start FastAPI server (Runs on http://localhost:8000)
 uvicorn app.main:app --reload
 ```
 
-### 2. Frontend Client Setup
-In a new terminal window, navigate to the `frontend/` directory, install packages, and boot the Next.js portal.
-
+### 2. Frontend Portal
 ```bash
 cd frontend
 
-# Install Node modules
+# Install dependencies
 npm install
 
-# Run TypeScript compilation checks
-npm run lint
-
-# Launch Next.js portal (Runs on http://localhost:3000)
+# Start Next.js Development Server (Runs on http://localhost:3000)
 npm run dev
 ```
 
 ---
 
-## 🔑 Seed User Logins
+## 🧪 Automated Testing & Code Verification
 
-The application is pre-seeded with test accounts representing each clearance tier. Login buttons are provided on the Sign-In screen for rapid verification:
-
-- **🎓 Student Portal:**
-  - **Email:** `student@campus.edu` | **Password:** `studentpassword`
-  - **Email:** `student2@campus.edu` | **Password:** `studentpassword`
-- **🏢 Department Purview Desk:**
-  - **Email:** `ithead@campus.edu` (WiFi/IT Services Head) | **Password:** `itpassword`
-  - **Email:** `hostelhead@campus.edu` (Hostel Warden Head) | **Password:** `hostelpassword`
-- **🏛️ Dean Admin Console (clearance):**
-  - **Email:** `admin@campus.edu` | **Password:** `adminpassword`
-
----
-
-## 🛡️ Core Built Features
-
-1. **Tab-Isolated Multi-Sessions (`sessionStorage`):** Allows users to concurrently log into completely different accounts across separate browser tabs (e.g. Dean console in Tab 1, Student portal in Tab 2) without auth conflicts.
-2. **Duplicate Tab Auto-Refresh:** Duplicating any active portal tab clones the JWT token and triggers exactly **one** automatic client-side refresh to rebuild local component states.
-3. **Automated AI Triaging:** triages text descriptions to assign claims instantly across Hostel, IT, Electrical, and Water departments.
-4. **Visual Evidence Verification:** Automatically parses uploads, penalizing spam files (-5.0% trust rating) and crediting verified maintenance photos (+2.0%).
-5. **Cross-Grievance Semantic Matcher:** Deduplicates reports by automatically linking complaints matching pre-existing cases.
-
----
-
-## 🧪 Automated Testing Verification
-
-Verify that all authentication APIs, claim restrictions, and posting routines function perfectly using the custom test suite:
-
+Run backend unit test suite:
 ```bash
-cd backend
-.\venv\Scripts\python C:\Users\Dell\.gemini\antigravity\brain\04eac6c2-68b6-4a1c-991c-ebf0072b5e22\scratch\run_api_tests.py
+pytest backend/tests
 ```
-*Expected output: `Ran 5 tests ... OK`*
+
+Run frontend production build & typecheck:
+```bash
+cd frontend
+npm run build
+```

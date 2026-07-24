@@ -25,6 +25,21 @@ def submit_complaint(
             detail="Only students and administrators can submit complaints."
         )
 
+    from datetime import datetime, timezone
+    now_utc = datetime.now(timezone.utc)
+    start_of_day = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
+    
+    today_count = db.query(Complaint).filter(
+        Complaint.student_id == current_user.id,
+        Complaint.created_at >= start_of_day
+    ).count()
+
+    if today_count >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Daily Submission Limit Reached: Each student can submit a maximum of 5 grievances per day. You have reached your daily quota for today."
+        )
+
     # 2. Persist the metadata of the complaint
     new_complaint = Complaint(
         title=payload.title,
@@ -34,6 +49,7 @@ def submit_complaint(
         location=payload.location,
         status="submitted"
     )
+
     db.add(new_complaint)
     db.flush()  # Populates ID
     
@@ -52,13 +68,23 @@ def submit_complaint(
     # 4. Automatically trigger the AI evaluation pipeline
     try:
         assessment_res = run_integrity_assessment_pipeline(new_complaint.id, db)
+        db.refresh(new_complaint)
+        if new_complaint.status == "rejected" or assessment_res.get("integrity_score", 100) < 40:
+            db.delete(new_complaint)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Submission Rejected: Fake, randomly written, or low-integrity issue detected by AI Credibility Auditor (Integrity Rating < 40%). Please provide a genuine, detailed campus grievance."
+            )
         return assessment_res
+    except HTTPException:
+        raise
     except Exception as e:
-        # Graceful handling if LLM API fails completely during presentation
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Complaint created but AI assessment engine failed: {str(e)}"
         )
+
 
 @router.post("/{id}/evaluate", response_model=AssessmentDetail)
 def re_evaluate_complaint(

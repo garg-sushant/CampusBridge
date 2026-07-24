@@ -76,6 +76,16 @@ export interface CategoryStats {
   count: number;
 }
 
+export interface IssueClusterStats {
+  category: string;
+  count: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  top_locations: string[];
+}
+
 export interface AdminDashboardStats {
   total_complaints: number;
   active_complaints: number;
@@ -86,4 +96,6 @@ export interface AdminDashboardStats {
   department_distribution: DepartmentStats[];
   urgency_distribution: UrgencyStats[];
   category_distribution: CategoryStats[];
+  grouped_issue_clusters?: IssueClusterStats[];
 }
+
