@@ -57,12 +57,9 @@ SECRET_KEY=your_secret_key_here
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# Google OAuth Credentials
-GOOGLE_CLIENT_ID=your_google_client_id_here
-GOOGLE_CLIENT_SECRET=your_google_client_secret_here
-
 # Upload Directory
 UPLOAD_DIR=uploads
+
 
 # Grok LLM Settings (console.x.ai)
 GROK_API_KEY=your_grok_api_key_here

@@ -26,15 +26,14 @@ This guide covers deploying the **CampusBridge** platform to production environm
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 5. Add Environment Variables in Render:
-   - `DATABASE_URL`: Your PostgreSQL database URL (Render PostgreSQL or Supabase/Neon).
+   - `DATABASE_URL`: Your PostgreSQL database URL (Neon DB / Supabase).
    - `SECRET_KEY`: Generate a random 64-character key (`openssl rand -hex 32`).
    - `ALGORITHM`: `HS256`
    - `ACCESS_TOKEN_EXPIRE_MINUTES`: `1440`
    - `GROK_API_KEY`: Your xAI Grok developer API key.
-   - `GOOGLE_CLIENT_ID`: Your Google OAuth Client ID.
-   - `GOOGLE_CLIENT_SECRET`: Your Google OAuth Client Secret.
    - `SMTP_USER` & `SMTP_PASSWORD`: (Optional) Gmail App Password for SMTP email notifications.
 6. Deploy the Web Service and copy your API backend URL (e.g., `https://campusbridge-api.onrender.com`).
+
 
 ---
 
