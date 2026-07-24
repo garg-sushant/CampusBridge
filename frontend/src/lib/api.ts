@@ -35,13 +35,16 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     options.cache = 'no-store';
   }
 
-  // Setup abort controller for timeout to prevent hung requests in background/duplicated tabs
+  // Setup abort controller with a generous 30s timeout for Cloud DBs (Neon/Supabase) & AI LLM pipelines
   const isUpload = path.includes('/upload') || options.body instanceof FormData;
+  const isLongTask = path.includes('/submit') || path.includes('/assessment');
+  const timeoutMs = isLongTask ? 45000 : 30000; // 30s standard, 45s for AI/submit endpoints
+
   const controller = new AbortController();
   let timeoutId: NodeJS.Timeout | undefined;
 
-  if (!isUpload) {
-    timeoutId = setTimeout(() => controller.abort(), 6000); // 6 seconds timeout
+  if (!isUpload && !options.signal) {
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     options.signal = controller.signal;
   }
 
@@ -60,17 +63,24 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
       throw new Error(errorDetail);
     }
 
+
     // Handle empty bodies (e.g. 204 status)
     if (response.status === 204) {
       return null as T;
     }
 
     return response.json() as Promise<T>;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Connection timeout while connecting to server. Please try again.');
+    }
+    throw err;
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
   }
+
 }
 
 export const api = {
