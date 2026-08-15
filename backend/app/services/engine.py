@@ -397,10 +397,34 @@ def run_integrity_assessment_pipeline(complaint_id: str, db: Session) -> dict:
 
     # 5. Deterministic Decision Agent (Agent 5)
     final_decision = "FORWARD_TO_DEPARTMENT"
+    info_prompt = None
+
     if final_integrity_score < 30:
         final_decision = "REJECT"
+        complaint.status = "rejected"
+        complaint.info_requested = None
     elif final_integrity_score < 60:
-        final_decision = "MANUAL_REVIEW"
+        final_decision = "REQUEST_ADDITIONAL_INFO"
+        complaint.status = "pending_info"
+        
+        # Determine specific requirements for additional documents / info
+        needs_evidence = not attachments
+        needs_more_detail = quality_res.get("quality_score", 50) < 50 or len(complaint.description.strip()) < 80
+        
+        req_parts = []
+        if needs_evidence:
+            req_parts.append("Upload clear photo or PDF document proof of the issue (e.g. photo of damaged equipment, leak, invoice/receipt, or official notice)")
+        if needs_more_detail:
+            req_parts.append("Provide specific location details (exact room number, floor, building block) and time when the issue occurred")
+        if not req_parts:
+            req_parts.append("Provide supporting photographic evidence and additional context to verify institutional authenticity")
+            
+        info_prompt = "; ".join(req_parts) + "."
+        complaint.info_requested = info_prompt
+    else:
+        final_decision = "FORWARD_TO_DEPARTMENT"
+        complaint.status = "verified"
+        complaint.info_requested = None
         
     # Dynamic Trust Score Adjustment to the Student
     old_trust = student.trust_score
@@ -420,13 +444,20 @@ def run_integrity_assessment_pipeline(complaint_id: str, db: Session) -> dict:
             reason=f"Automated assessment: final decision sealed as {final_decision}."
         ))
 
-    # Set complaint status accordingly
-    if final_decision == "REJECT":
-        complaint.status = "rejected"
-    elif final_decision == "FORWARD_TO_DEPARTMENT":
-        complaint.status = "verified"
-    else:
-        complaint.status = "submitted" # Manual Review retains submitted status for Dean's inbox
+    # Send action required email to student when score is between 30 and 60
+    if final_decision == "REQUEST_ADDITIONAL_INFO" and student and student.email:
+        try:
+            from app.services.email_service import dispatch_additional_info_request_notification
+            dispatch_additional_info_request_notification(
+                student_email=student.email,
+                student_name=student.full_name,
+                complaint_title=complaint.title,
+                complaint_id=complaint.id,
+                info_requested=info_prompt or "Please provide additional supporting documents or details.",
+                integrity_score=final_integrity_score
+            )
+        except Exception as e:
+            print(f"Failed to dispatch additional info request email: {e}")
         
     # Override urgency in complaint based on AI evaluation
     complaint.urgency = severity_res["severity"].lower()
@@ -474,6 +505,21 @@ def run_integrity_assessment_pipeline(complaint_id: str, db: Session) -> dict:
         is_internal=True,
         is_ai_generated=True
     ))
+
+    # Add public student-visible AI notification comment when additional info is needed
+    if final_decision == "REQUEST_ADDITIONAL_INFO":
+        db.add(Comment(
+            complaint_id=complaint.id,
+            user_id=None,
+            content=(
+                f"AI Triage Auditor [Action Required]:\n"
+                f"- Assessment Rating: {final_integrity_score}/100\n"
+                f"- Requested Details/Documents: {info_prompt}\n"
+                f"Please submit the requested information or upload evidence via the dashboard form below."
+            ),
+            is_internal=False,
+            is_ai_generated=True
+        ))
 
     # Persist the final Decision Log
     reasoning_summary_text = "\n".join(reasoning_steps)

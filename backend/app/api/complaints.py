@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import List, Optional
@@ -28,7 +28,6 @@ def submit_complaint(
 
     from datetime import datetime, timezone
 
-
     # Enforce daily quota limit: max 5 issues per student email ID per day
     now_utc = datetime.now(timezone.utc)
     start_of_day = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
@@ -54,12 +53,9 @@ def submit_complaint(
         urgency="medium"  # Defaults to medium, AI or Admin will classify/override
     )
 
-    
     db.add(new_complaint)
     db.commit()
     db.refresh(new_complaint)
-    
-
     
     # Trigger AI orchestration & routing
     from app.services.ai_agent import run_ai_orchestration
@@ -73,27 +69,129 @@ def submit_complaint(
     assessment = run_integrity_assessment_pipeline(new_complaint.id, db)
     integrity_score = assessment.get("integrity_score", 100)
     
-    # Audit for fake/spam, nonsense patterns, or Integrity Trust Rating < 40%
+    # Audit for fake/spam, nonsense patterns, or Integrity Trust Rating < 30%
     title_desc = (new_complaint.title + " " + new_complaint.description).lower()
     nonsense_patterns = [r"^asdf", r"^xyz", r"^qwer", r"^test", r"^123", r"^\s*$"]
     is_nonsense = any(re.search(pattern, title_desc) for pattern in nonsense_patterns)
     is_too_short = len(new_complaint.description.strip()) < 15
 
-    if new_complaint.status == "rejected" or integrity_score < 40 or is_nonsense or is_too_short:
-        # Remove fake/low-integrity complaint so it is NOT submitted
+    # 3-Tier Outcome:
+    # 1. Below 30: Rejected as spam / mock / fake
+    if new_complaint.status == "rejected" or integrity_score < 30 or is_nonsense or is_too_short:
         db.delete(new_complaint)
         db.commit()
         
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Submission Rejected: Fake, randomly written, or low-integrity issue detected by AI Credibility Auditor (Integrity Rating: {integrity_score}% < 40%). Please provide a genuine, detailed campus grievance."
+            detail=f"Submission Rejected: Fake, randomly written, or low-integrity issue detected by AI Credibility Auditor (Integrity Rating: {integrity_score}% < 30%). Please provide a genuine, detailed campus grievance."
         )
+    # 2. 30 to 60: Pending additional info/documents (email dispatched by engine)
+    elif integrity_score < 60:
+        new_complaint.status = "pending_info"
+        db.commit()
+        db.refresh(new_complaint)
+    # 3. 60 and above: Accepted and verified directly
     else:
-        new_complaint.status = "submitted"
+        new_complaint.status = "verified"
         db.commit()
         db.refresh(new_complaint)
     
     return new_complaint
+
+
+@router.post("/{complaint_id}/provide-info", response_model=ComplaintOut)
+def provide_additional_info(
+    complaint_id: str,
+    additional_info: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint not found."
+        )
+
+    # Only the student who submitted the complaint or admin can provide info
+    if current_user.role == "student" and complaint.student_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to provide info for this grievance."
+        )
+
+    # Strictly check that the complaint is in the 30-60 range (pending_info)
+    if complaint.status != "pending_info":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Additional information can only be submitted for grievances currently marked as 'pending_info' (30-60 score range)."
+        )
+
+    if (not additional_info or not additional_info.strip()) and (not file or not file.filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide text details or upload a file as requested by the AI."
+        )
+
+    # 1. Append additional info text if provided
+    if additional_info and additional_info.strip():
+        complaint.description = f"{complaint.description}\n\n[Additional Information Provided by Student]:\n{additional_info.strip()}"
+        db.add(Comment(
+            complaint_id=complaint.id,
+            user_id=current_user.id,
+            content=f"Student Provided Requested Information:\n{additional_info.strip()}",
+            is_internal=False,
+            is_ai_generated=False
+        ))
+
+    # 2. Attach and verify uploaded file if provided
+    if file and file.filename:
+        content_type = file.content_type or ""
+        if not (content_type.startswith("image/") or content_type == "application/pdf"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type: {file.filename}. Only images and PDFs are supported."
+            )
+        file_url = save_uploaded_file(file)
+        attachment = Attachment(
+            complaint_id=complaint.id,
+            file_url=file_url,
+            file_type=content_type,
+            ai_verification_status="pending"
+        )
+        db.add(attachment)
+        db.flush()
+        
+        # Run AI evidence verification
+        from app.services.ai_agent import run_ai_evidence_verification
+        run_ai_evidence_verification(attachment.id, db)
+
+    db.commit()
+    db.refresh(complaint)
+
+    # 3. Re-run multi-agent integrity assessment pipeline with the newly added info & documents
+    from app.services.engine import run_integrity_assessment_pipeline
+    assessment = run_integrity_assessment_pipeline(complaint.id, db)
+    db.refresh(complaint)
+
+    # 4. If upgraded to verified (>= 60), send status update notification
+    if complaint.status == "verified" and current_user.email:
+        try:
+            dept_name = complaint.department.name if complaint.department else "Assigned Department"
+            dispatch_status_update_notification(
+                student_email=current_user.email,
+                student_name=current_user.full_name,
+                complaint_title=complaint.title,
+                complaint_id=complaint.id,
+                new_status="verified",
+                updated_by="AI Governance Auditor",
+                changes_summary=f"Additional evidence verified successfully. Grievance integrity rating is now {assessment.get('integrity_score', 60)}/100 and routed to {dept_name}."
+            )
+        except Exception as e:
+            print(f"Failed to dispatch verification email: {e}")
+
+    return complaint
 
 
 

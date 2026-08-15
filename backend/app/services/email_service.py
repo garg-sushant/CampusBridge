@@ -74,6 +74,7 @@ def dispatch_status_update_notification(
 ):
     status_colors = {
         "verified": "#10b981",
+        "pending_info": "#f59e0b",
         "assigned": "#6366f1",
         "in_progress": "#f59e0b",
         "resolved": "#10b981",
@@ -186,3 +187,78 @@ def dispatch_comment_notification(
     """
 
     return send_realtime_email(recipient_email, subject, html, comment_content)
+
+
+def dispatch_additional_info_request_notification(
+    student_email: str,
+    student_name: str,
+    complaint_title: str,
+    complaint_id: str,
+    info_requested: str,
+    integrity_score: int
+):
+    subject = f"[ACTION REQUIRED] Additional Evidence/Information Needed for: {complaint_title[:50]}"
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; padding: 20px; }}
+        .card {{ max-width: 600px; margin: 0 auto; background: #18181b; border: 1px solid #27272a; border-radius: 16px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }}
+        .header {{ border-bottom: 1px solid #27272a; padding-bottom: 16px; margin-bottom: 24px; }}
+        .title {{ font-size: 20px; font-weight: 800; color: #ffffff; margin: 0 0 8px 0; }}
+        .badge {{ display: inline-block; padding: 6px 14px; border-radius: 9999px; font-weight: 800; font-size: 12px; color: #000000; background-color: #f59e0b; text-transform: uppercase; letter-spacing: 0.05em; }}
+        .content-box {{ background: #09090b; border: 1px solid #3f3f46; border-radius: 12px; padding: 20px; margin: 20px 0; }}
+        .alert-box {{ background: #451a03; border: 1px solid #b45309; border-radius: 10px; padding: 16px; margin: 16px 0; color: #fef3c7; font-size: 14px; }}
+        .label {{ font-size: 11px; font-weight: 700; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }}
+        .val {{ font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 12px; }}
+        .btn {{ display: inline-block; background: #f59e0b; color: #000000; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 800; font-size: 14px; margin-top: 16px; }}
+        .footer {{ font-size: 11px; color: #71717a; margin-top: 32px; text-align: center; border-top: 1px solid #27272a; padding-top: 16px; }}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="header">
+          <span style="font-family: monospace; font-size: 11px; font-weight: 700; color: #fbbf24; text-transform: uppercase;">CAMPUSBRIDGE AI TRIAGE AUDITOR</span>
+          <h2 class="title" style="margin-top: 6px;">Action Required: Additional Information Needed</h2>
+        </div>
+        
+        <p style="font-size: 15px; color: #e4e4e7;">Dear <strong>{student_name}</strong>,</p>
+        <p style="font-size: 14px; color: #a1a1aa;">Your submitted campus grievance was audited by our AI multi-agent integrity system (Integrity Score: <strong>{integrity_score}/100</strong>).</p>
+        
+        <div class="alert-box">
+          <strong>⚠️ Specific Information / Documents Requested by AI:</strong><br>
+          <p style="margin: 8px 0 0 0; line-height: 1.5;">{info_requested}</p>
+        </div>
+
+        <div class="content-box">
+          <div class="label">Grievance Title</div>
+          <div class="val">{complaint_title}</div>
+          
+          <div class="label">Current Status</div>
+          <div class="val"><span class="badge">Pending Additional Info</span></div>
+        </div>
+
+        <div style="text-align: center;">
+          <a href="http://localhost:3000/dashboard" class="btn">Upload Requested Documents & Info ➔</a>
+        </div>
+
+        <div class="footer">
+          CampusBridge Student Redressal & Verification System &bull; Automated AI Request
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+    text = (
+        f"Dear {student_name},\n\n"
+        f"Your grievance '{complaint_title}' requires additional information/documents (Score: {integrity_score}/100).\n\n"
+        f"AI Request: {info_requested}\n\n"
+        f"Please provide the requested details at: http://localhost:3000/dashboard"
+    )
+
+    return send_realtime_email(student_email, subject, html, text)
+

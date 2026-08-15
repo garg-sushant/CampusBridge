@@ -17,7 +17,7 @@ export interface Department {
   created_at: string;
 }
 
-export type ComplaintStatus = 'submitted' | 'verified' | 'assigned' | 'in_progress' | 'resolved' | 'rejected';
+export type ComplaintStatus = 'submitted' | 'verified' | 'pending_info' | 'assigned' | 'in_progress' | 'resolved' | 'rejected';
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Attachment {
@@ -50,6 +50,7 @@ export interface Complaint {
   urgency: UrgencyLevel;
   department_id: number | null;
   location: string;
+  info_requested?: string | null;
   is_duplicate: boolean;
   duplicate_of_id: string | null;
   created_at: string;

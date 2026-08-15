@@ -27,6 +27,13 @@ export default function StudentDashboard() {
   const [commentLoading, setCommentLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // States for Additional Information submission (30-60 score range)
+  const [additionalText, setAdditionalText] = useState('');
+  const [additionalFile, setAdditionalFile] = useState<File | null>(null);
+  const [infoSubmitting, setInfoSubmitting] = useState(false);
+  const [infoSubmitSuccess, setInfoSubmitSuccess] = useState<string | null>(null);
+  const [infoSubmitError, setInfoSubmitError] = useState<string | null>(null);
+
   // Filter out automated system/AI logs to preserve clean human-to-human timeline
   const cleanConversationComments = comments.filter(c => {
     if (c.is_ai_generated) return false;
@@ -137,23 +144,77 @@ export default function StudentDashboard() {
     }
   };
 
+  // Submit additional information/documents requested by AI (30-60 score range)
+  const handleProvideAdditionalInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedComplaint) return;
+    if (!additionalText.trim() && !additionalFile) {
+      setInfoSubmitError('Please provide text details or select a document/image to upload.');
+      return;
+    }
+    setInfoSubmitting(true);
+    setInfoSubmitError(null);
+    setInfoSubmitSuccess(null);
+
+    try {
+      const formData = new FormData();
+      if (additionalText.trim()) {
+        formData.append('additional_info', additionalText.trim());
+      }
+      if (additionalFile) {
+        formData.append('file', additionalFile);
+      }
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/complaints/${selectedComplaint.id}/provide-info`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to submit additional information.');
+      }
+
+      const updatedComplaint: Complaint = await res.json();
+      setSelectedComplaint(updatedComplaint);
+      setAdditionalText('');
+      setAdditionalFile(null);
+      setInfoSubmitSuccess(
+        updatedComplaint.status === 'verified' 
+          ? '✓ Information and evidence verified! Grievance accepted and routed directly to department.' 
+          : '✓ Additional information submitted and reassessed.'
+      );
+      loadComplaints(false);
+      loadSelectedDetails(selectedComplaint.id, false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'An error occurred while submitting additional information.';
+      setInfoSubmitError(msg);
+    } finally {
+      setInfoSubmitting(false);
+    }
+  };
+
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#050508] flex items-center justify-center">
-        <div className="h-10 w-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#0b0f17] flex items-center justify-center">
+        <div className="h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!user || user.role !== 'student') {
     return (
-      <div className="min-h-screen bg-[#050508] flex flex-col items-center justify-center text-center px-4">
+      <div className="min-h-screen bg-[#0b0f17] flex flex-col items-center justify-center text-center px-4">
         <AlertTriangle className="h-12 w-12 text-rose-400 mb-4" aria-hidden="true" />
         <h3 className="text-xl font-bold text-white">Access Denied</h3>
-        <p className="text-sm text-neutral-400 mt-1 mb-4">
+        <p className="text-sm text-slate-400 mt-1 mb-4">
           {!user ? 'Please sign in to access your portal.' : 'This student portal is restricted to student accounts only.'}
         </p>
-        <Link href="/login" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-white transition-all">
+        <Link href="/login" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-white transition-all shadow-md">
           {!user ? 'Sign In' : 'Go Back'}
         </Link>
       </div>
@@ -165,21 +226,21 @@ export default function StudentDashboard() {
   const resolvedCount = complaints.filter(c => c.status === 'resolved').length;
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-950 text-white relative">
+    <div className="min-h-screen flex flex-col bg-[#0b0f17] text-white relative">
       <Navbar />
 
       {/* Main Page Area */}
-      <main className="flex-1 z-10 bg-zinc-950 pb-16">
+      <main className="flex-1 z-10 pb-16">
         {/* Dashboard Grid */}
         <div className="px-4 sm:px-8 md:px-12 lg:px-16 py-8 space-y-8 w-full mx-auto">
           {/* Headline Title */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h1 className="text-3xl font-extrabold tracking-tight">Student Portal</h1>
-              <p className="text-zinc-400 text-sm mt-1">Track and manage your filed campus complaints transparently.</p>
+              <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">Student Portal</h1>
+              <p className="text-slate-400 text-sm mt-1">Track and manage your filed campus complaints transparently.</p>
             </div>
-            <Link href="/submit" className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold text-white shadow-sm hover:shadow-md transition-all duration-200">
-              <Plus className="h-5 w-5" aria-hidden="true" />
+            <Link href="/submit" className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-200">
+              <Plus className="h-4.5 w-4.5" aria-hidden="true" />
               <span>Submit Grievance</span>
             </Link>
           </div>
@@ -189,10 +250,10 @@ export default function StudentDashboard() {
             {/* Filed count */}
             <div className="glass-panel p-5 rounded-2xl flex items-center justify-between">
               <div>
-                <span className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">Filed Grievances</span>
-                <span className="text-3xl font-extrabold mt-1 block">{filedCount}</span>
+                <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Filed Grievances</span>
+                <span className="text-3xl font-extrabold mt-1 block text-slate-100">{filedCount}</span>
               </div>
-              <div className="p-3 bg-zinc-950 border border-zinc-800 text-zinc-400 rounded-xl shadow-sm">
+              <div className="p-3 bg-slate-900 border border-slate-800 text-slate-400 rounded-xl shadow-inner">
                 <FileText className="h-6 w-6" aria-hidden="true" />
               </div>
             </div>
@@ -200,10 +261,10 @@ export default function StudentDashboard() {
             {/* Resolved count */}
             <div className="glass-panel p-5 rounded-2xl flex items-center justify-between">
               <div>
-                <span className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">Resolved Issues</span>
+                <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Resolved Issues</span>
                 <span className="text-3xl font-extrabold mt-1 block text-emerald-400">{resolvedCount}</span>
               </div>
-              <div className="p-3 bg-zinc-950 border border-zinc-800 text-emerald-400 rounded-xl shadow-sm">
+              <div className="p-3 bg-slate-900 border border-slate-800 text-emerald-400 rounded-xl shadow-inner">
                 <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
               </div>
             </div>
@@ -211,10 +272,10 @@ export default function StudentDashboard() {
             {/* Circular Gauge Trust Score */}
             <div className="glass-panel p-5 rounded-2xl flex items-center justify-between">
               <div className="space-y-1">
-                <span className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">Trust Integrity Score</span>
-                <span className="text-3xl font-extrabold block text-indigo-400">{user.trust_score.toFixed(1)}%</span>
+                <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Trust Integrity Score</span>
+                <span className="text-3xl font-extrabold block text-blue-400">{user.trust_score.toFixed(1)}%</span>
                 <span className={`text-[10px] font-semibold font-mono px-2 py-0.5 rounded-full inline-block ${
-                  user.trust_score >= 90 ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30' : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                  user.trust_score >= 90 ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30' : 'bg-slate-900 text-slate-400 border border-slate-800'
                 }`}>
                   {user.trust_score >= 90 ? 'High Credibility' : 'Standard Rating'}
                 </span>
@@ -223,19 +284,19 @@ export default function StudentDashboard() {
               {/* SVG circular progress */}
               <div className="relative h-16 w-16">
                 <svg className="h-full w-full transform -rotate-90" role="img" aria-label={`Integrity Trust rating dial showing ${user.trust_score.toFixed(1)}%`}>
-                  <circle cx="32" cy="32" r="28" fill="transparent" stroke="#18181b" strokeWidth="4" />
+                  <circle cx="32" cy="32" r="28" fill="transparent" stroke="#1e293b" strokeWidth="4" />
                   <circle 
                     cx="32" 
                     cy="32" 
                     r="28" 
                     fill="transparent" 
-                    stroke="#4f46e5" 
+                    stroke="#3b82f6" 
                     strokeWidth="4" 
                     strokeDasharray={2 * Math.PI * 28}
                     strokeDashoffset={(2 * Math.PI * 28) * (1 - user.trust_score / 100)}
                   />
                 </svg>
-                <div className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-zinc-300">
+                <div className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-slate-200">
                   {user.trust_score.toFixed(0)}%
                 </div>
               </div>
@@ -273,6 +334,7 @@ export default function StudentDashboard() {
                 >
                   <option value="">All Statuses</option>
                   <option value="submitted">Submitted</option>
+                  <option value="pending_info">Pending Additional Info</option>
                   <option value="verified">Verified</option>
                   <option value="assigned">Assigned</option>
                   <option value="in_progress">In Progress</option>
@@ -299,53 +361,58 @@ export default function StudentDashboard() {
               <div className="grid grid-cols-1 gap-4">
                 {complaints.map((c) => {
                   const isSelected = selectedComplaint?.id === c.id;
+                  const isPendingInfo = c.status === 'pending_info';
                   return (
                     <div 
                       key={c.id}
                       onClick={() => handleSelectComplaint(c)}
-                      className={`glass-panel p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:border-indigo-500/40 hover:bg-neutral-900/40 transition-all ${
-                        isSelected ? 'border-indigo-500 bg-neutral-900/60 shadow-lg shadow-indigo-500/5' : ''
+                      className={`glass-panel p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:border-blue-500/40 hover:bg-slate-900/60 transition-all ${
+                        isPendingInfo ? 'border-amber-500/40 bg-amber-950/15' : ''
+                      } ${
+                        isSelected ? 'border-blue-500 bg-slate-900/80 shadow-lg shadow-blue-500/10' : ''
                       }`}
                     >
                       <div className="space-y-2.5 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-xs font-bold uppercase px-2.5 py-1 rounded-lg ${
-                            c.status === 'resolved' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
-                            c.status === 'rejected' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400' :
-                            c.status === 'in_progress' ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400' :
-                            'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
+                          <span className={`text-xs font-bold uppercase px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+                            c.status === 'resolved' ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
+                            c.status === 'rejected' ? 'bg-rose-500/15 border border-rose-500/30 text-rose-400' :
+                            c.status === 'pending_info' ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 font-extrabold shadow-sm' :
+                            c.status === 'in_progress' ? 'bg-sky-500/15 border border-sky-500/30 text-sky-400' :
+                            'bg-blue-500/15 border border-blue-500/30 text-blue-400'
                           }`}>
-                            {c.status.replace('_', ' ')}
+                            {c.status === 'pending_info' && <AlertTriangle className="h-3 w-3 text-amber-400" aria-hidden="true" />}
+                            {c.status === 'pending_info' ? 'Action Required: Info Needed' : c.status.replace('_', ' ')}
                           </span>
                           
                           <span className={`text-xs font-bold uppercase px-2.5 py-1 rounded-lg ${
-                            c.urgency === 'critical' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400' :
+                            c.urgency === 'critical' ? 'bg-rose-500/15 border border-rose-500/30 text-rose-400 font-extrabold' :
                             c.urgency === 'high' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-300' :
                             c.urgency === 'medium' ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400' :
-                            'bg-neutral-800 text-neutral-400'
+                            'bg-slate-800/60 text-slate-400 border border-slate-700/50'
                           }`}>
                             {c.urgency} urgency
                           </span>
 
-                          <span className="text-xs text-neutral-400 font-mono">
+                          <span className="text-xs text-slate-400 font-mono">
                             {new Date(c.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                           </span>
                         </div>
-                        <h4 className="font-extrabold text-lg text-white tracking-tight">{c.title}</h4>
-                        <p className="text-neutral-300 text-sm line-clamp-2 leading-relaxed">{c.description}</p>
+                        <h4 className="font-extrabold text-lg text-slate-100 tracking-tight">{c.title}</h4>
+                        <p className="text-slate-300 text-sm line-clamp-2 leading-relaxed">{c.description}</p>
                         
-                        <div className="flex items-center space-x-4 text-xs text-neutral-400 pt-1.5">
+                        <div className="flex items-center space-x-4 text-xs text-slate-400 pt-1.5">
                           <span className="flex items-center space-x-1">
-                            <MapPin className="h-4 w-4 text-zinc-500" aria-hidden="true" />
+                            <MapPin className="h-4 w-4 text-slate-400" aria-hidden="true" />
                             <span>{c.location}</span>
                           </span>
-                          <span className="text-neutral-700">•</span>
+                          <span className="text-slate-600">•</span>
                           <span>Dept: {c.department?.name || 'Assessing...'}</span>
                         </div>
                       </div>
 
                       <div className="flex items-center justify-end">
-                        <div className="p-2.5 rounded-xl bg-neutral-900 border border-white/5 text-neutral-400">
+                        <div className="p-2.5 rounded-xl bg-slate-900 border border-white/[0.08] text-slate-400 group-hover:text-blue-400">
                           <ChevronRight className="h-4 w-4" aria-hidden="true" />
                         </div>
                       </div>
@@ -356,20 +423,22 @@ export default function StudentDashboard() {
             )}
           </div>
         </div>
-      </main>      {/* Right Drawer: Complaint Audit Stepper & Details */}
+      </main>
+
+      {/* Right Drawer: Complaint Audit Stepper & Details */}
       {selectedComplaint && (
-        <aside className="fixed inset-y-0 right-0 w-full sm:max-w-lg bg-zinc-950 border-l border-zinc-900 shadow-2xl flex flex-col z-50 animate-slide-in">
+        <aside className="fixed inset-y-0 right-0 w-full sm:max-w-lg bg-[#0e131f] border-l border-white/[0.08] shadow-2xl flex flex-col z-50 animate-slide-in">
           {/* Drawer Header */}
-          <div className="flex items-center justify-between p-6 border-b border-zinc-900 bg-zinc-950">
+          <div className="flex items-center justify-between p-6 border-b border-white/[0.08] bg-[#0b0f17]">
             <div>
-              <span className="block text-xs font-mono text-indigo-400 font-semibold tracking-wider">GRIEVANCE TIMELINE & AUDIT</span>
-              <span className="font-bold text-sm truncate max-w-64 block text-white mt-1">{selectedComplaint.title}</span>
+              <span className="block text-xs font-mono text-blue-400 font-semibold tracking-wider">GRIEVANCE TIMELINE & AUDIT</span>
+              <span className="font-bold text-sm truncate max-w-64 block text-slate-100 mt-1">{selectedComplaint.title}</span>
             </div>
             <button 
               onClick={() => setSelectedComplaint(null)} 
               aria-label="Close detailed timeline drawer"
               title="Close detailed timeline drawer"
-              className="p-2 rounded-xl bg-neutral-900 border border-white/5 text-neutral-400 hover:text-white transition-all"
+              className="p-2 rounded-xl bg-slate-900 border border-white/[0.08] text-slate-400 hover:text-white transition-all"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -443,6 +512,92 @@ export default function StudentDashboard() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Interactive Section for Additional Information Requested by AI (30-60 score range) */}
+                {selectedComplaint.status === 'pending_info' && (
+                  <div className="glass-panel p-5 rounded-2xl border-2 border-amber-500/50 bg-amber-950/20 space-y-4 animate-slide-in shadow-xl shadow-amber-500/5">
+                    <div className="flex items-start space-x-3">
+                      <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                        <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">
+                          Action Required • Additional Info Needed
+                        </span>
+                        <h4 className="text-sm font-extrabold text-white mt-0.5">
+                          AI Triage Requirement (Score: 30–60 Range)
+                        </h4>
+                      </div>
+                    </div>
+
+                    {/* The exact prompt asked by AI */}
+                    <div className="p-4 rounded-xl bg-black/70 border border-amber-500/30 text-xs text-amber-200/90 leading-relaxed">
+                      <span className="font-bold text-amber-300 block mb-1">Requested by AI Auditor:</span>
+                      {selectedComplaint.info_requested || 'Please upload clear photo/document evidence of the reported problem and provide specific room/timing details to verify authenticity.'}
+                    </div>
+
+                    {infoSubmitSuccess && (
+                      <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-medium">
+                        {infoSubmitSuccess}
+                      </div>
+                    )}
+
+                    {infoSubmitError && (
+                      <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-medium">
+                        {infoSubmitError}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleProvideAdditionalInfo} className="space-y-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase text-neutral-300 mb-1">
+                          Provide Requested Details / Specifics
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={additionalText}
+                          onChange={(e) => setAdditionalText(e.target.value)}
+                          placeholder="Type the specific details, room numbers, or clarifications requested above..."
+                          className="w-full bg-zinc-900/90 border border-zinc-700 rounded-xl p-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase text-neutral-300 mb-1">
+                          Attach Requested Photo or Document (JPG, PNG, PDF)
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setAdditionalFile(e.target.files[0]);
+                            }
+                          }}
+                          className="block w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-500/20 file:text-amber-300 hover:file:bg-amber-500/30 cursor-pointer bg-zinc-900 border border-zinc-700 rounded-xl p-1.5"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={infoSubmitting}
+                        className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center space-x-2 shadow-lg shadow-amber-500/20"
+                      >
+                        {infoSubmitting ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                            <span>Verifying & Submitting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>Submit Requested Info & Re-verify Grievance</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
                   </div>
                 )}
 

@@ -621,6 +621,7 @@ export default function AdminDashboard() {
                 >
                   <option value="">All Statuses</option>
                   <option value="submitted">Submitted</option>
+                  <option value="pending_info">Pending Additional Info</option>
                   <option value="verified">Verified</option>
                   <option value="assigned">Assigned</option>
                   <option value="in_progress">In Progress</option>
@@ -723,6 +724,7 @@ export default function AdminDashboard() {
                             <span className={`px-2.5 py-1 rounded-lg font-bold uppercase text-[10px] ${
                               c.status === 'resolved' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30' :
                               c.status === 'rejected' ? 'bg-rose-950/40 text-rose-400 border border-rose-800/30' :
+                              c.status === 'pending_info' ? 'bg-amber-950/40 text-amber-300 border border-amber-800/30' :
                               c.status === 'in_progress' ? 'bg-amber-950/40 text-amber-400 border border-amber-800/30' :
                               'bg-zinc-900 text-zinc-400 border border-zinc-800'
                             }`}>
@@ -867,6 +869,7 @@ export default function AdminDashboard() {
                         className="w-full px-3 py-2.5 rounded-lg glass-input text-xs bg-neutral-950 font-medium"
                       >
                         <option value="submitted">Submitted</option>
+                        <option value="pending_info">Pending Additional Info</option>
                         <option value="verified">Verified</option>
                         <option value="assigned">Assigned</option>
                         <option value="in_progress">In Progress</option>

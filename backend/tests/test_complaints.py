@@ -12,7 +12,7 @@ def test_submit_complaint_success(client, student_headers, db):
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == payload["title"]
-    assert data["status"] == "submitted"
+    assert data["status"] in ["verified", "pending_info"]
     assert data["department_id"] is not None
     assert data["urgency"] in ["medium", "high"]
 
@@ -132,4 +132,56 @@ def test_daily_complaint_quota_limit(client, student_headers, db):
     response = client.post("/api/complaints/submit", json=payload, headers=student_headers)
     assert response.status_code == 400
     assert "Daily Submission Limit Reached" in response.json()["detail"]
+
+def test_provide_additional_info_workflow(client, student_headers, staff_headers, db):
+    student_user = db.query(User).filter(User.email == "test_student@campus.edu").first()
+    
+    # 1. Create a complaint in pending_info state
+    comp = Complaint(
+        title="Hostel water leakage in bathroom",
+        description="Water tap is loose and dripping slowly in floor 2 bathroom.",
+        student_id=student_user.id,
+        category="Water & Sanitation",
+        location="Hostel Block B, Floor 2",
+        status="pending_info",
+        info_requested="Please upload clear photo or PDF document proof of the issue."
+    )
+    db.add(comp)
+    db.commit()
+
+    # 2. Student provides the requested additional details
+    response = client.post(
+        f"/api/complaints/{comp.id}/provide-info",
+        data={"additional_info": "Specific location: Room 204 attached restroom, hot water tap pipe fitting loose."},
+        headers=student_headers
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "Room 204 attached restroom" in data["description"]
+    assert data["status"] in ["verified", "pending_info"]
+
+def test_provide_additional_info_forbidden_when_not_pending_info(client, student_headers, db):
+    student_user = db.query(User).filter(User.email == "test_student@campus.edu").first()
+    
+    # Complaint already resolved / verified
+    comp = Complaint(
+        title="Classroom fan noise",
+        description="Fan in room 101 makes screeching sound.",
+        student_id=student_user.id,
+        category="Electrical Maintenance",
+        location="Academic Block A, Room 101",
+        status="verified"
+    )
+    db.add(comp)
+    db.commit()
+
+    # Attempt to provide info on a verified complaint must fail with 400
+    response = client.post(
+        f"/api/complaints/{comp.id}/provide-info",
+        data={"additional_info": "Extra note that shouldn't be accepted."},
+        headers=student_headers
+    )
+    assert response.status_code == 400
+    assert "pending_info" in response.json()["detail"]
+
 

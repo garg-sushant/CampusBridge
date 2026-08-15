@@ -65,10 +65,11 @@ class Complaint(Base):
     description = Column(Text, nullable=False)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     category = Column(String(100), nullable=False)  # WiFi, Electricity, Canteen, etc.
-    status = Column(String(50), nullable=False, default="submitted")  # submitted, verified, assigned, in_progress, resolved, rejected
+    status = Column(String(50), nullable=False, default="submitted")  # submitted, verified, pending_info, assigned, in_progress, resolved, rejected
     urgency = Column(String(50), nullable=False, default="medium")  # low, medium, high, critical
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     location = Column(String(255), nullable=False)
+    info_requested = Column(Text, nullable=True)
     is_duplicate = Column(Boolean, nullable=False, default=False)
     duplicate_of_id = Column(String(36), ForeignKey("complaints.id"), nullable=True)
     created_at = Column(UTCDateTime(), server_default=func.now())

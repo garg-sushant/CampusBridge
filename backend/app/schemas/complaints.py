@@ -52,6 +52,7 @@ class ComplaintOut(ComplaintBase):
     status: str
     urgency: str
     department_id: Optional[int] = None
+    info_requested: Optional[str] = None
     is_duplicate: bool
     duplicate_of_id: Optional[str] = None
     created_at: datetime
@@ -70,6 +71,7 @@ class ComplaintListItem(ComplaintBase):
     status: str
     urgency: str
     department_id: Optional[int] = None
+    info_requested: Optional[str] = None
     is_duplicate: bool
     created_at: datetime
     updated_at: datetime
