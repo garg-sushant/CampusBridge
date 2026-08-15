@@ -167,21 +167,7 @@ export default function StudentDashboard() {
         formData.append('file', additionalFile);
       }
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/complaints/${selectedComplaint.id}/provide-info`, {
-        method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: formData
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || 'Failed to submit additional information.');
-      }
-
-      const updatedComplaint: Complaint = await res.json();
+      const updatedComplaint = await api.provideInfo<Complaint>(selectedComplaint.id, formData);
       setSelectedComplaint(updatedComplaint);
       setAdditionalText('');
       setAdditionalFile(null);

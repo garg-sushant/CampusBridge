@@ -1,10 +1,16 @@
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-const BASE_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
-
+export function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:8000/api';
+    }
+  }
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+  return rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+}
 
 function getAuthToken(): string | null {
   if (typeof window !== 'undefined') {
-    return sessionStorage.getItem('token');
+    return sessionStorage.getItem('token') || localStorage.getItem('token');
   }
   return null;
 }
@@ -37,7 +43,7 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
 
   // Setup abort controller with a generous 30s timeout for Cloud DBs (Neon/Supabase) & AI LLM pipelines
   const isUpload = path.includes('/upload') || options.body instanceof FormData;
-  const isLongTask = path.includes('/submit') || path.includes('/assessment');
+  const isLongTask = path.includes('/submit') || path.includes('/assessment') || path.includes('/provide-info');
   const timeoutMs = isLongTask ? 45000 : 30000; // 30s standard, 45s for AI/submit endpoints
 
   const controller = new AbortController();
@@ -48,7 +54,8 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     options.signal = controller.signal;
   }
 
-  const url = `${BASE_URL}${path}`;
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}${path}`;
   try {
     const response = await fetch(url, options);
 
@@ -96,7 +103,8 @@ export const api = {
     formData.append('username', email);
     formData.append('password', password);
 
-    const response = await fetch(`${BASE_URL}/auth/login`, {
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -129,7 +137,8 @@ export const api = {
       formData.append('files', file);
     });
 
-    const response = await fetch(`${BASE_URL}/complaints/${complaintId}/upload`, {
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}/complaints/${complaintId}/upload`, {
       method: 'POST',
       headers,
       body: formData,
@@ -147,9 +156,37 @@ export const api = {
     return response.json() as Promise<T>;
   },
 
+  // Additional Information & Evidence submission handler (for 30-60 score pending_info)
+  provideInfo: async <T = unknown>(complaintId: string, formData: FormData): Promise<T> => {
+    const token = getAuthToken();
+    const headers = new Headers();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}/complaints/${complaintId}/provide-info`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorDetail = 'Failed to submit additional information.';
+      try {
+        const errJson = await response.json();
+        errorDetail = errJson.detail || errorDetail;
+      } catch {}
+      throw new Error(errorDetail);
+    }
+
+    return response.json() as Promise<T>;
+  },
+
   // Google Login payload handler
   googleLogin: async (email: string, role?: string, departmentId?: number, idToken?: string): Promise<{ access_token: string; token_type: string }> => {
-    const response = await fetch(`${BASE_URL}/auth/google`, {
+    const baseUrl = getApiBaseUrl();
+    const response = await fetch(`${baseUrl}/auth/google`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -183,10 +220,17 @@ export function getBackendMediaUrl(path?: string | null): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-  const host = apiBase.replace(/\/api\/?$/, '');
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  // If in browser and running on localhost, always point to local backend
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return `http://localhost:8000${cleanPath}`;
+  }
+
+  const apiBase = getApiBaseUrl();
+  const host = apiBase.replace(/\/api\/?$/, '');
   return `${host}${cleanPath}`;
 }
+
 
 

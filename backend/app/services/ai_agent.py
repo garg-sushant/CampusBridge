@@ -49,13 +49,15 @@ def run_ai_orchestration(complaint_id: str, db: Session):
                 f"   - IT (WiFi / IT Networks / Internet / Account Portals)\n"
                 f"   - ELECTRICAL (Socket / Tripping Breakers / Lighting / AC / Fans)\n"
                 f"   - WATER (Water leakages / Plumbing / Toilet / Tap leakages)\n"
-                f"   - TRANSPORT (Bus / Shuttle routes and timing schedules)\n"
-                f"   - FINANCE (Scholarship details / receipt payments / transactions)\n"
-                f"   - ACADEMIC (Classrooms / Exams / Course registration / Grades)\n"
-                f"   - CANTEEN (Canteen food hygiene / cleanliness / preparation)\n"
-                f"   - LIBRARY (Books issue / Library catalog / Reading room quietness)\n\n"
-                f"5. Choose EXACTLY one urgency level: low, medium, high, critical.\n\n"
-                f"Provide your response EXACTLY as a single JSON object with this format, containing no extra text or markdown formatting:\n"
+                f"You are a rigorous institutional credibility auditor and category classifier.\n"
+                f"Grievance Title: '{complaint.title}'\n"
+                f"Grievance Description: '{complaint.description}'\n"
+                f"Student Trust Score: {student.trust_score:.1f}/100\n\n"
+                f"Classify this submission into one of these departments: HOSTEL, IT, ELECTRICAL, WATER, CANTEEN, LIBRARY, ACADEMICS, ADMINISTRATION.\n"
+                f"Set urgency to: low, medium, high, critical.\n"
+                f"Determine if the submission is spam/gibberish/mock text (is_spam: true/false).\n"
+                f"Assign trust_score_adjustment between -15.0 and +3.0 based on report quality.\n\n"
+                f"Respond ONLY with a JSON object conforming to:\n"
                 f"{{\n"
                 f'  "is_spam": true_or_false,\n'
                 f'  "trust_score_adjustment": float_value,\n'
@@ -80,17 +82,7 @@ def run_ai_orchestration(complaint_id: str, db: Session):
             if response.status_code == 200:
                 res_data = response.json()
                 content = res_data["choices"][0]["message"]["content"].strip()
-
-                # Strip markdown blocks
-                if content.startswith("```json"):
-                    content = content[7:]
-                if content.startswith("```"):
-                    content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                content = content.strip()
-
-                grok_result = json.loads(content)
+                grok_result = safe_parse_json_from_llm(content)
         except Exception as e:
             print(f"Grok API triaging and credibility check failed: {e}")
 
@@ -485,16 +477,7 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
                 res_data = response.json()
                 content = res_data["choices"][0]["message"]["content"].strip()
 
-                # Strip markdown blocks
-                if content.startswith("```json"):
-                    content = content[7:]
-                if content.startswith("```"):
-                    content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                content = content.strip()
-
-                data = json.loads(content)
+                data = safe_parse_json_from_llm(content)
                 status_val = data.get("status", "verified").lower()
                 explanation = data.get("explanation", "Evidence processed by Grok AI.")
                 detected_urgency = data.get("urgency", complaint.urgency).lower()

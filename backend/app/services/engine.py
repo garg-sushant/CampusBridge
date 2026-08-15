@@ -7,6 +7,69 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.base import User, Complaint, Attachment, AgentEvaluation, DecisionLog, AuditTrail, TrustScoreHistory, Department, Comment
 
+def safe_parse_json_from_llm(raw_text: str) -> dict:
+    """Robustly extracts and parses JSON payload from LLM responses even with extra commentary or markdown."""
+    if not raw_text:
+        raise ValueError("Empty response received from LLM")
+    
+    text = raw_text.strip()
+    
+    # 1. Strip markdown code fences if present
+    if "```json" in text:
+        try:
+            extracted = text.split("```json", 1)[1].split("```", 1)[0].strip()
+            return json.loads(extracted)
+        except Exception:
+            pass
+    elif "```" in text:
+        try:
+            extracted = text.split("```", 1)[1].split("```", 1)[0].strip()
+            return json.loads(extracted)
+        except Exception:
+            pass
+
+    # 2. Try direct load
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # 3. Find outer JSON object braces
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        snippet = text[first_brace:last_brace + 1]
+        try:
+            return json.loads(snippet)
+        except Exception:
+            # Clean trailing commas
+            cleaned = re.sub(r",\s*([\]}])", r"\1", snippet)
+            try:
+                return json.loads(cleaned)
+            except Exception:
+                pass
+
+    # 4. Fallback line-by-line regex parser
+    result = {}
+    for line in text.split("\n"):
+        match = re.search(r'["\']?([a-zA-Z0-9_]+)["\']?\s*:\s*([^,\n}]+)', line)
+        if match:
+            k, v = match.group(1).strip(), match.group(2).strip().strip('"').strip("'")
+            if v.isdigit():
+                result[k] = int(v)
+            elif v.replace('.', '', 1).isdigit() and '.' in v:
+                result[k] = float(v)
+            elif v.lower() == "true":
+                result[k] = True
+            elif v.lower() == "false":
+                result[k] = False
+            else:
+                result[k] = v
+    if result:
+        return result
+
+    raise ValueError(f"Could not parse valid JSON from LLM: {raw_text[:200]}")
+
 def call_grok_json(prompt: str, system_prompt: str) -> dict:
     """Invokes Grok LLM and parses structured JSON output safely."""
     api_key = settings.GROK_API_KEY or settings.CHATGROK_API_KEY or os.getenv("GROK_API_KEY") or os.getenv("CHATGROK_API_KEY")
@@ -35,17 +98,7 @@ def call_grok_json(prompt: str, system_prompt: str) -> dict:
         raise RuntimeError(f"Grok API request failed with status {response.status_code}: {response.text}")
         
     content = response.json()["choices"][0]["message"]["content"].strip()
-    
-    # Strip potential markdown formatting wraps
-    if content.startswith("```json"):
-        content = content[7:]
-    if content.startswith("```"):
-        content = content[3:]
-    if content.endswith("```"):
-        content = content[:-3]
-    content = content.strip()
-    
-    return json.loads(content)
+    return safe_parse_json_from_llm(content)
 
 def get_fallback_evidence_evaluation(complaint: Complaint, primary_file: str) -> dict:
     """Offline fallback calculation for Evidence Verification Agent (Agent 1)"""
