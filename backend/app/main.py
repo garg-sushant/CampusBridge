@@ -21,7 +21,8 @@ async def lifespan(app_instance: FastAPI):
     upload_path = ensure_upload_dir()
     
     # Mount static resource routing for evidence files
-    app_instance.mount("/static/uploads", StaticFiles(directory=upload_path), name="uploads")
+    app_instance.mount("/static/uploads", StaticFiles(directory=upload_path), name="static_uploads")
+    app_instance.mount("/uploads", StaticFiles(directory=upload_path), name="uploads")
     yield
 
 # Instantiate FastAPI application

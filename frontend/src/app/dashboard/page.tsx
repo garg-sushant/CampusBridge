@@ -33,6 +33,7 @@ export default function StudentDashboard() {
   const [infoSubmitting, setInfoSubmitting] = useState(false);
   const [infoSubmitSuccess, setInfoSubmitSuccess] = useState<string | null>(null);
   const [infoSubmitError, setInfoSubmitError] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Filter out automated system/AI logs to preserve clean human-to-human timeline
   const cleanConversationComments = comments.filter(c => {
@@ -480,37 +481,64 @@ export default function StudentDashboard() {
                 {/* Evidence attachments */}
                 {selectedComplaint.attachments && selectedComplaint.attachments.length > 0 && (
                   <div className="space-y-4">
-                    <span className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">Submitted Evidence</span>
+                    <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      Submitted Evidence & Proof ({selectedComplaint.attachments.length})
+                    </span>
                     <div className="grid grid-cols-1 gap-3">
-                      {selectedComplaint.attachments.map((att) => (
-                        <div key={att.id} className="glass-panel p-4.5 rounded-xl border border-white/5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <a 
-                              href={`http://localhost:8000${att.file_url}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center space-x-2 text-xs font-mono text-indigo-400 hover:text-indigo-300 transition-colors"
-                            >
-                              <ImageIcon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
-                              <span className="font-semibold underline">View Attachment File</span>
-                            </a>
-                            <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-md ${
-                              att.ai_verification_status === 'verified' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
-                              att.ai_verification_status === 'rejected' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400' :
-                              'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
-                            }`}>
-                              System Verification: {att.ai_verification_status}
-                            </span>
+                      {selectedComplaint.attachments.map((att) => {
+                        const fullUrl = `http://localhost:8000${att.file_url}`;
+                        const isImg = att.file_type?.startsWith('image/') || att.file_url?.endsWith('.png') || att.file_url?.endsWith('.jpg') || att.file_url?.endsWith('.jpeg') || att.file_url?.endsWith('.webp') || att.file_url?.endsWith('.bmp');
+                        return (
+                          <div key={att.id} className="glass-panel p-4.5 rounded-xl border border-white/[0.08] space-y-3">
+                            <div className="flex items-center justify-between">
+                              <a 
+                                href={fullUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center space-x-2 text-xs font-mono text-blue-400 hover:text-blue-300 transition-colors"
+                              >
+                                <ImageIcon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
+                                <span className="font-semibold underline">Open Attachment Link</span>
+                              </a>
+                              <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-md ${
+                                att.ai_verification_status === 'verified' ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' :
+                                att.ai_verification_status === 'rejected' ? 'bg-rose-500/15 border border-rose-500/30 text-rose-400' :
+                                'bg-blue-500/15 border border-blue-500/30 text-blue-400'
+                              }`}>
+                                AI Verification: {att.ai_verification_status}
+                              </span>
+                            </div>
+
+                            {/* Inline Screenshot Thumbnail Preview */}
+                            {isImg && (
+                              <div 
+                                onClick={() => setPreviewImageUrl(fullUrl)}
+                                className="relative group rounded-xl overflow-hidden border border-slate-800 bg-slate-900 cursor-pointer h-48 flex items-center justify-center"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img 
+                                  src={fullUrl} 
+                                  alt="Submitted Proof Screenshot" 
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <span className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white font-bold text-xs shadow-md border border-white/10">
+                                    Click to Expand Screenshot 🔍
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {att.ai_verification_explanation && (
+                              <p className={`text-xs leading-relaxed pl-1 ${
+                                att.ai_verification_status === 'rejected' ? 'text-rose-300' : 'text-slate-400'
+                              }`}>
+                                {att.ai_verification_explanation}
+                              </p>
+                            )}
                           </div>
-                          {att.ai_verification_explanation && (
-                            <p className={`text-xs leading-relaxed pl-1 ${
-                              att.ai_verification_status === 'rejected' ? 'text-rose-300' : 'text-neutral-400'
-                            }`}>
-                              {att.ai_verification_explanation}
-                            </p>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -664,7 +692,7 @@ export default function StudentDashboard() {
           </div>
 
           {/* Comment Submission footer */}
-          <div className="p-5 border-t border-zinc-900 bg-zinc-950">
+          <div className="p-5 border-t border-white/[0.08] bg-[#0b0f17]">
             <form onSubmit={handleAddComment} className="flex gap-2">
               <label htmlFor="new-comment" className="sr-only">New comment</label>
               <input
@@ -673,14 +701,14 @@ export default function StudentDashboard() {
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Post a public progress comment..."
-                className="flex-1 px-4 py-3 rounded-xl glass-input text-sm placeholder-neutral-500 focus:outline-none"
+                className="flex-1 px-4 py-3 rounded-xl glass-input text-sm placeholder-slate-500 focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={commentLoading || !newComment.trim()}
                 aria-label="Send public progress comment"
                 title="Send public progress comment"
-                className="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-neutral-500 text-white shadow-lg transition-all"
+                className="p-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 text-white shadow-lg transition-all"
               >
                 {commentLoading ? (
                   <div className="h-4.5 w-4.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -691,6 +719,30 @@ export default function StudentDashboard() {
             </form>
           </div>
         </aside>
+      )}
+
+      {/* Image Full-Size Modal Preview */}
+      {previewImageUrl && (
+        <div 
+          onClick={() => setPreviewImageUrl(null)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer animate-fade-in"
+        >
+          <div className="relative max-w-4xl max-h-[90vh] bg-slate-950 p-2 rounded-2xl border border-white/10 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setPreviewImageUrl(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/70 text-white hover:bg-black transition-colors z-10"
+              aria-label="Close screenshot preview"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={previewImageUrl} 
+              alt="Expanded Proof Evidence Preview" 
+              className="max-h-[85vh] w-auto max-w-full rounded-xl object-contain"
+            />
+          </div>
+        </div>
       )}
     </div>
   );
