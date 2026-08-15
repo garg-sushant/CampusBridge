@@ -36,7 +36,11 @@ htmlcov/
 campus_governance.db
 
 # Media Uploads & Temp Files
-backend/uploads/*
+backend/uploads/*.tmp
+!backend/uploads/*.png
+!backend/uploads/*.jpg
+!backend/uploads/*.jpeg
+!backend/uploads/*.webp
 !backend/uploads/.gitkeep
 
 # Node & Next.js Build Artifacts
