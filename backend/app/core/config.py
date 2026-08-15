@@ -8,11 +8,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     UPLOAD_DIR: str = "uploads"
     
-    # xAI Grok LLM Integration Configurations
+    # Groq / LLM Integration Configurations
     GROK_API_KEY: str = ""
     CHATGROK_API_KEY: str = ""
-    GROK_API_URL: str = "https://api.x.ai/v1"
-    GROK_MODEL: str = "grok-beta"
+    GROK_API_URL: str = "https://api.groq.com/openai/v1"
+    GROK_MODEL: str = "openai/gpt-oss-120b"
 
     # Realtime Gmail / SMTP Email Dispatcher Configurations
     SMTP_SERVER: str = "smtp.gmail.com"

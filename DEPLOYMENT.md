@@ -30,7 +30,8 @@ This guide covers deploying the **CampusBridge** platform to production environm
    - `SECRET_KEY`: Generate a random 64-character key (`openssl rand -hex 32`).
    - `ALGORITHM`: `HS256`
    - `ACCESS_TOKEN_EXPIRE_MINUTES`: `1440`
-   - `GROK_API_KEY`: Your xAI Grok developer API key.
+   - `GROK_API_KEY`: Your Groq API key.
+   - `GROK_MODEL`: Target model (`openai/gpt-oss-120b`).
    - `SMTP_USER` & `SMTP_PASSWORD`: (Optional) Gmail App Password for SMTP email notifications.
 6. Deploy the Web Service and copy your API backend URL (e.g., `https://campusbridge-api.onrender.com`).
 

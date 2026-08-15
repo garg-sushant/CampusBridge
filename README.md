@@ -8,7 +8,7 @@ CampusBridge is a full-stack, AI-powered institutional governance and redressal 
 
 - **Backend**: **Python 3.11**, **FastAPI**, **SQLAlchemy ORM**, **SQLite / PostgreSQL Database**, **Pytest**.
 - **Frontend**: **Next.js (App Router)**, **React 19**, **TypeScript**, **NextAuth.js (Google OAuth & Credentials)**, **TailwindCSS**, Glassmorphic Design System.
-- **AI Engine**: **xAI Grok / ChatGrok LLM Pipeline** (`grok-beta`) for automated grievance triaging, urgency level scoring (`critical`, `high`, `medium`, `low`), and multi-agent integrity credibility audits.
+- **AI Engine**: **Groq / OpenAI GPT-OSS 120B Pipeline** (`openai/gpt-oss-120b`) for automated grievance triaging, urgency level scoring (`critical`, `high`, `medium`, `low`), and multi-agent integrity credibility audits.
 - **Realtime Notifications**: **Gmail / SMTP Background Email Dispatcher** (`BackgroundTasks` + HTML Templates) and live portal timeline updates.
 
 ---
@@ -61,11 +61,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES=1440
 UPLOAD_DIR=uploads
 
 
-# Grok LLM Settings (console.x.ai)
-GROK_API_KEY=your_grok_api_key_here
+# Groq LLM Settings (console.groq.com)
+GROK_API_KEY=your_groq_api_key_here
 CHATGROK_API_KEY=your_chatgrok_api_key_here
-GROK_API_URL=https://api.x.ai/v1
-GROK_MODEL=grok-beta
+GROK_API_URL=https://api.groq.com/openai/v1
+GROK_MODEL=openai/gpt-oss-120b
 
 # Realtime Gmail SMTP Email Dispatcher Settings
 SMTP_SERVER=smtp.gmail.com

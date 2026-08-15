@@ -13,8 +13,8 @@ def call_grok_json(prompt: str, system_prompt: str) -> dict:
     if not api_key or "your_actual_api_key_here" in api_key:
         raise ValueError("Grok API key is not configured inside the server environment.")
 
-    url = settings.GROK_API_URL or "https://api.x.ai/v1"
-    model = settings.GROK_MODEL or "grok-beta"
+    url = settings.GROK_API_URL or "https://api.groq.com/openai/v1"
+    model = settings.GROK_MODEL or "openai/gpt-oss-120b"
 
     headers = {
         "Authorization": f"Bearer {api_key}",

@@ -29,7 +29,7 @@ def run_ai_orchestration(complaint_id: str, db: Session):
         api_key = ""
     if api_key:
         try:
-            url = f"{settings.GROK_API_URL or 'https://api.x.ai/v1'}/chat/completions"
+            url = f"{settings.GROK_API_URL or 'https://api.groq.com/openai/v1'}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -65,7 +65,7 @@ def run_ai_orchestration(complaint_id: str, db: Session):
                 f"}}"
             )
             payload = {
-                "model": settings.GROK_MODEL or "grok-beta",
+                "model": settings.GROK_MODEL or "openai/gpt-oss-120b",
                 "messages": [
                     {
                         "role": "system",
@@ -431,7 +431,7 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
         api_key = ""
     if api_key:
         try:
-            url = f"{settings.GROK_API_URL or 'https://api.x.ai/v1'}/chat/completions"
+            url = f"{settings.GROK_API_URL or 'https://api.groq.com/openai/v1'}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -469,7 +469,7 @@ def run_ai_evidence_verification(attachment_id: int, db: Session):
                 f"Return ONLY the JSON object. Do not include markdown code block formatting."
             )
             payload = {
-                "model": settings.GROK_MODEL or "grok-beta",
+                "model": settings.GROK_MODEL or "openai/gpt-oss-120b",
                 "messages": [
                     {
                         "role": "system",
