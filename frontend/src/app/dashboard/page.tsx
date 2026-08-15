@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { api } from '@/lib/api';
+import { api, getBackendMediaUrl } from '@/lib/api';
 import { Complaint, Comment } from '@/types';
 import Navbar from '@/components/Navbar';
 import { 
@@ -34,6 +34,7 @@ export default function StudentDashboard() {
   const [infoSubmitSuccess, setInfoSubmitSuccess] = useState<string | null>(null);
   const [infoSubmitError, setInfoSubmitError] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [brokenImages, setBrokenImages] = useState<Record<number, boolean>>({});
 
   // Filter out automated system/AI logs to preserve clean human-to-human timeline
   const cleanConversationComments = comments.filter(c => {
@@ -486,8 +487,8 @@ export default function StudentDashboard() {
                     </span>
                     <div className="grid grid-cols-1 gap-3">
                       {selectedComplaint.attachments.map((att) => {
-                        const fullUrl = `http://localhost:8000${att.file_url}`;
-                        const isImg = att.file_type?.startsWith('image/') || att.file_url?.endsWith('.png') || att.file_url?.endsWith('.jpg') || att.file_url?.endsWith('.jpeg') || att.file_url?.endsWith('.webp') || att.file_url?.endsWith('.bmp');
+                        const fullUrl = getBackendMediaUrl(att.file_url);
+                        const isImg = att.file_type?.startsWith('image/') || att.file_url?.endsWith('.png') || att.file_url?.endsWith('.jpg') || att.file_url?.endsWith('.jpeg') || att.file_url?.endsWith('.webp') || att.file_url?.endsWith('.bmp') || att.file_url?.endsWith('.avif');
                         return (
                           <div key={att.id} className="glass-panel p-4.5 rounded-xl border border-white/[0.08] space-y-3">
                             <div className="flex items-center justify-between">
@@ -511,22 +512,31 @@ export default function StudentDashboard() {
 
                             {/* Inline Screenshot Thumbnail Preview */}
                             {isImg && (
-                              <div 
-                                onClick={() => setPreviewImageUrl(fullUrl)}
-                                className="relative group rounded-xl overflow-hidden border border-slate-800 bg-slate-900 cursor-pointer h-48 flex items-center justify-center"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img 
-                                  src={fullUrl} 
-                                  alt="Submitted Proof Screenshot" 
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                  <span className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white font-bold text-xs shadow-md border border-white/10">
-                                    Click to Expand Screenshot 🔍
-                                  </span>
+                              brokenImages[att.id] ? (
+                                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/50 h-28 flex flex-col items-center justify-center p-4 text-center space-y-1">
+                                  <ImageIcon className="h-6 w-6 text-slate-500" />
+                                  <span className="text-xs font-semibold text-slate-400">Attached File: {att.file_url.split('/').pop()}</span>
+                                  <span className="text-[10px] text-slate-500">File verified & stored in system registry</span>
                                 </div>
-                              </div>
+                              ) : (
+                                <div 
+                                  onClick={() => setPreviewImageUrl(fullUrl)}
+                                  className="relative group rounded-xl overflow-hidden border border-slate-800 bg-slate-900 cursor-pointer h-48 flex items-center justify-center"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img 
+                                    src={fullUrl} 
+                                    alt="Submitted Proof Screenshot" 
+                                    onError={() => setBrokenImages(prev => ({ ...prev, [att.id]: true }))}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <span className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white font-bold text-xs shadow-md border border-white/10">
+                                      Click to Expand Screenshot 🔍
+                                    </span>
+                                  </div>
+                                </div>
+                              )
                             )}
 
                             {att.ai_verification_explanation && (

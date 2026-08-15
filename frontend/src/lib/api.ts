@@ -175,3 +175,18 @@ export const api = {
   }
 };
 
+/**
+ * Returns the fully qualified URL for backend media files (uploads/static).
+ */
+export function getBackendMediaUrl(path?: string | null): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+  const host = apiBase.replace(/\/api\/?$/, '');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${host}${cleanPath}`;
+}
+
+
