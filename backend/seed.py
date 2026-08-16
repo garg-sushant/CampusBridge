@@ -106,17 +106,33 @@ def seed_database(reset: bool = False):
             db.flush()
             dept_head_users[dh["dept"]] = user
 
-        # Student Users (20 students for realistic distribution)
+        # Student Users (including sgarg9031@gmail.com for live email testing)
         student_names = [
-            "Amit Patel", "Priya Nair", "Rohan Deshmukh", "Sneha Reddy", "Kavya Sen",
-            "Arjun Mehta", "Ananya Sharma", "Rahul Verma", "Neha Gupta", "Vikram Joshi",
-            "Divya Rao", "Siddharth Malhotra", "Pooja Hegde", "Aditya Roy", "Isha Kapoor",
-            "Manish Kumar", "Ritu Singh", "Karan Johar", "Tarun Saxena", "Shreya Ghoshal"
+            ("sgarg9031@gmail.com", "Sushant Garg (Interview Demo Student)"),
+            ("student@campus.edu", "Amit Patel"),
+            ("student2@campus.edu", "Priya Nair"),
+            ("student3@campus.edu", "Rohan Deshmukh"),
+            ("student4@campus.edu", "Sneha Reddy"),
+            ("student5@campus.edu", "Kavya Sen"),
+            ("student6@campus.edu", "Arjun Mehta"),
+            ("student7@campus.edu", "Ananya Sharma"),
+            ("student8@campus.edu", "Rahul Verma"),
+            ("student9@campus.edu", "Neha Gupta"),
+            ("student10@campus.edu", "Vikram Joshi"),
+            ("student11@campus.edu", "Divya Rao"),
+            ("student12@campus.edu", "Siddharth Malhotra"),
+            ("student13@campus.edu", "Pooja Hegde"),
+            ("student14@campus.edu", "Aditya Roy"),
+            ("student15@campus.edu", "Isha Kapoor"),
+            ("student16@campus.edu", "Manish Kumar"),
+            ("student17@campus.edu", "Ritu Singh"),
+            ("student18@campus.edu", "Karan Johar"),
+            ("student19@campus.edu", "Tarun Saxena"),
+            ("student20@campus.edu", "Shreya Ghoshal")
         ]
 
         students = []
-        for i, name in enumerate(student_names):
-            email = f"student{i+1}@campus.edu" if i > 0 else "student@campus.edu"
+        for email, name in student_names:
             u = User(
                 email=email,
                 hashed_password=get_password_hash("studentpassword"),
@@ -144,6 +160,7 @@ def seed_database(reset: bool = False):
                 ("Laundry room washing machine #3 drain clogged", "Washing machine #3 overflows soapy water onto floor during spin cycle.", "medium", "resolved", "Hostel Block B Laundry Facility")
             ],
             "IT": [
+                ("[LIVE INTERVIEW DEMO] Real-Time Email Notification Dispatch Test", "This test complaint is specifically provisioned for live interview verification. Any status transition (In Progress, Resolved, Rejected) or official staff comment posted on this issue by the interviewer/dean will immediately dispatch a live Gmail notification directly to sgarg9031@gmail.com.", "high", "in_progress", "Central Library & IT Server Room"),
                 ("WiFi in Hostel Block B disconnected for 3 days", "Since Monday night, the IT-Guest and IT-Student networks in Block B are dropping connections.", "medium", "submitted", "Hostel Block B, Floor 2"),
                 ("Projector HDMI port damaged in Main Auditorium B", "Main projector display port displays blue lines when connected to laptops during lectures.", "low", "resolved", "Main Auditorium B"),
                 ("High latency & packet loss on WiFi network in Library", "Ping times exceeding 1200ms on Central Library 2nd floor WiFi access point.", "high", "in_progress", "Central Library 2nd Floor"),

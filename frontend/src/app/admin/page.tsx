@@ -1020,7 +1020,16 @@ export default function AdminDashboard() {
                               <img 
                                 src={fullUrl} 
                                 alt="Student Uploaded Proof Screenshot" 
-                                onError={() => setBrokenImages(prev => ({ ...prev, [att.id]: true }))}
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  const fallback = att.file_url.startsWith('/') ? att.file_url : `/${att.file_url}`;
+                                  if (!target.dataset.triedFallback && target.src !== window.location.origin + fallback) {
+                                    target.dataset.triedFallback = 'true';
+                                    target.src = fallback;
+                                  } else {
+                                    setBrokenImages(prev => ({ ...prev, [att.id]: true }));
+                                  }
+                                }}
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                               />
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">

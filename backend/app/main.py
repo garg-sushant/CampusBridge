@@ -16,13 +16,6 @@ async def lifespan(app_instance: FastAPI):
         Base.metadata.create_all(bind=engine)
     except Exception as e:
         print(f"Warning: Automatic DB table creation failed on startup: {e}")
-
-    # Establish storage structures
-    upload_path = ensure_upload_dir()
-    
-    # Mount static resource routing for evidence files
-    app_instance.mount("/static/uploads", StaticFiles(directory=upload_path), name="static_uploads")
-    app_instance.mount("/uploads", StaticFiles(directory=upload_path), name="uploads")
     yield
 
 # Instantiate FastAPI application
@@ -41,6 +34,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Establish storage structures & Mount static resource routing for evidence files
+upload_path = ensure_upload_dir()
+app.mount("/static/uploads", StaticFiles(directory=upload_path), name="static_uploads")
+app.mount("/uploads", StaticFiles(directory=upload_path), name="uploads")
 
 
 

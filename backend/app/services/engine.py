@@ -343,6 +343,21 @@ def run_integrity_assessment_pipeline(complaint_id: str, db: Session) -> dict:
             score_metric=quality_res["quality_score"]
         ))
 
+    def _safe_float(val, default=0.0):
+        if val is None:
+            return default
+        if isinstance(val, (list, tuple)):
+            return _safe_float(val[0] if val else default, default)
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+
+    q_score = _safe_float(quality_res.get("quality_score"), 70.0)
+    e_score = _safe_float(evidence_res.get("evidence_score"), 0.0)
+    r_score = _safe_float(evidence_res.get("relevance_score"), 0.0)
+    t_score = _safe_float(getattr(student, "trust_score", 100.0), 100.0)
+
     # 3. Deterministic Integrity Assessment Agent (Agent 3)
     reasoning_steps = []
     
@@ -350,29 +365,29 @@ def run_integrity_assessment_pipeline(complaint_id: str, db: Session) -> dict:
         # Weighted average of Quality (30%), Evidence (30%), Relevance (20%), and Student Trust (20%)
         q_weight, e_weight, r_weight, t_weight = 0.30, 0.30, 0.20, 0.20
         weighted_base = (
-            (quality_res["quality_score"] * q_weight) +
-            (evidence_res["evidence_score"] * e_weight) +
-            (evidence_res["relevance_score"] * r_weight) +
-            (student.trust_score * t_weight)
+            (q_score * q_weight) +
+            (e_score * e_weight) +
+            (r_score * r_weight) +
+            (t_score * t_weight)
         )
         reasoning_steps.append(
             f"Weighted multi-criteria base score calculated: "
-            f"Quality {quality_res['quality_score']} ({q_weight:.0%}) + "
-            f"Evidence {evidence_res['evidence_score']} ({e_weight:.0%}) + "
-            f"Relevance {evidence_res['relevance_score']} ({r_weight:.0%}) + "
-            f"User Trust {student.trust_score:.1f}% ({t_weight:.0%}) = {weighted_base:.1f}."
+            f"Quality {q_score:.0f} ({q_weight:.0%}) + "
+            f"Evidence {e_score:.0f} ({e_weight:.0%}) + "
+            f"Relevance {r_score:.0f} ({r_weight:.0%}) + "
+            f"User Trust {t_score:.1f}% ({t_weight:.0%}) = {weighted_base:.1f}."
         )
     else:
         # Weighted average of Quality (70%) and Student Trust (30%)
         q_weight, t_weight = 0.70, 0.30
         weighted_base = (
-            (quality_res["quality_score"] * q_weight) +
-            (student.trust_score * t_weight)
+            (q_score * q_weight) +
+            (t_score * t_weight)
         )
         reasoning_steps.append(
             f"Weighted multi-criteria base score calculated (no attachments): "
-            f"Quality {quality_res['quality_score']} ({q_weight:.0%}) + "
-            f"User Trust {student.trust_score:.1f}% ({t_weight:.0%}) = {weighted_base:.1f}."
+            f"Quality {q_score:.0f} ({q_weight:.0%}) + "
+            f"User Trust {t_score:.1f}% ({t_weight:.0%}) = {weighted_base:.1f}."
         )
 
     # Apply strict penalties on top of the weighted base
@@ -386,13 +401,12 @@ def run_integrity_assessment_pipeline(complaint_id: str, db: Session) -> dict:
             reasoning_steps.append("Maintenance/leakage complaint reported with missing visual proof (-15).")
 
     # Penalty Rule 2: Low Text Quality / Gibberish / Mock
-    if quality_res["quality_score"] < 30:
+    if q_score < 30:
         score_mod -= 40
         reasoning_steps.append("Complaint text flagged as mock, extremely short, or gibberish (-40).")
 
     # Penalty Rule 3: Irrelevant Evidence (already factored into base, but apply minor check if needed)
-    if attachments and evidence_res["relevance_score"] < 40:
-        # We don't apply an extra penalty since it is already heavily factored in, but let's log it for clarity.
+    if attachments and r_score < 40:
         reasoning_steps.append("Evidence relevance is extremely low (already factored into base score).")
 
     # Penalty Rule 4: Duplicate checks
@@ -405,7 +419,7 @@ def run_integrity_assessment_pipeline(complaint_id: str, db: Session) -> dict:
     final_integrity_score = max(0, min(100, int(round(final_score_raw))))
     
     # Calculate a proxy confidence index
-    confidence_index = int((quality_res["quality_score"] + (evidence_res["relevance_score"] if attachments else 80)) / 2)
+    confidence_index = int((q_score + (r_score if attachments else 80.0)) / 2.0)
 
     # 4. Severity Assessment Agent (Agent 4)
     severity_res = {
