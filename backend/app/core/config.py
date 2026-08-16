@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM_NAME: str = "CampusBridge Governance Portal"
+    FRONTEND_URL: str = "https://campus-bridge-kysitiz7d-sushant-gargs-projects.vercel.app"
 
 
     @property

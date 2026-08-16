@@ -1,3 +1,4 @@
+import os
 import smtplib
 import logging
 from email.mime.text import MIMEText
@@ -5,6 +6,13 @@ from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
 
 logger = logging.getLogger("email_service")
+
+def get_frontend_portal_url(path: str = "/dashboard") -> str:
+    """Returns the production or configured frontend portal URL for email CTA links."""
+    base = getattr(settings, "FRONTEND_URL", "").strip() or os.getenv("FRONTEND_URL", "").strip() or os.getenv("NEXTAUTH_URL", "").strip() or "https://campus-bridge-kysitiz7d-sushant-gargs-projects.vercel.app"
+    base = base.rstrip("/")
+    clean_path = path if path.startswith("/") else f"/{path}"
+    return f"{base}{clean_path}"
 
 def send_realtime_email(
     to_email: str,
@@ -84,8 +92,8 @@ def dispatch_status_update_notification(
     status_badge_color = status_colors.get(new_status.lower(), "#6366f1")
 
     subject = f"[ALERT] Grievance Status Updated: [{new_status.upper()}] - {complaint_title[:50]}"
+    portal_url = get_frontend_portal_url("/dashboard")
 
-    
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -129,7 +137,7 @@ def dispatch_status_update_notification(
         </div>
 
         <div style="text-align: center;">
-          <a href="http://localhost:3000/dashboard" class="btn">View Grievance Status & History ➔</a>
+          <a href="{portal_url}" class="btn">View Grievance Status & History ➔</a>
         </div>
 
         <div class="footer">
@@ -140,7 +148,7 @@ def dispatch_status_update_notification(
     </html>
     """
 
-    text = f"Dear {student_name},\n\nYour grievance '{complaint_title}' status is now [{new_status.upper()}].\nDetails: {changes_summary}\nUpdated by: {updated_by}\n\nView details: http://localhost:3000/dashboard"
+    text = f"Dear {student_name},\n\nYour grievance '{complaint_title}' status is now [{new_status.upper()}].\nDetails: {changes_summary}\nUpdated by: {updated_by}\n\nView details: {portal_url}"
 
     return send_realtime_email(student_email, subject, html, text)
 
@@ -153,8 +161,8 @@ def dispatch_comment_notification(
     comment_content: str
 ):
     subject = f"[MESSAGE] New Communication on Grievance: {complaint_title[:50]}"
+    portal_url = get_frontend_portal_url("/dashboard")
 
-    
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -179,7 +187,7 @@ def dispatch_comment_notification(
         </div>
 
         <div style="text-align: center; margin-top: 24px;">
-          <a href="http://localhost:3000/dashboard" class="btn">Open Portal Discussion ➔</a>
+          <a href="{portal_url}" class="btn">Open Portal Discussion ➔</a>
         </div>
       </div>
     </body>
@@ -198,7 +206,8 @@ def dispatch_additional_info_request_notification(
     integrity_score: int
 ):
     subject = f"[ACTION REQUIRED] Additional Evidence/Information Needed for: {complaint_title[:50]}"
-    
+    portal_url = get_frontend_portal_url("/dashboard")
+
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -242,7 +251,7 @@ def dispatch_additional_info_request_notification(
         </div>
 
         <div style="text-align: center;">
-          <a href="http://localhost:3000/dashboard" class="btn">Upload Requested Documents & Info ➔</a>
+          <a href="{portal_url}" class="btn">Upload Requested Documents & Info ➔</a>
         </div>
 
         <div class="footer">
@@ -257,7 +266,7 @@ def dispatch_additional_info_request_notification(
         f"Dear {student_name},\n\n"
         f"Your grievance '{complaint_title}' requires additional information/documents (Score: {integrity_score}/100).\n\n"
         f"AI Request: {info_requested}\n\n"
-        f"Please provide the requested details at: http://localhost:3000/dashboard"
+        f"Please provide the requested details at: {portal_url}"
     )
 
     return send_realtime_email(student_email, subject, html, text)
