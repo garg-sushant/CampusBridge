@@ -23,9 +23,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const getStoredToken = () => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('token') || localStorage.getItem('token');
+    }
+    return null;
+  };
+
+  const removeStoredToken = () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('token');
+      localStorage.removeItem('token');
+    }
+  };
+
   const refreshUser = useCallback(async () => {
     try {
-      const token = sessionStorage.getItem('token');
+      const token = getStoredToken();
       if (!token) {
         setUser(null);
         setLoading(false);
@@ -38,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to load user session:', err);
       const isNetworkError = err instanceof TypeError || (err instanceof Error && err.name === 'AbortError');
       if (!isNetworkError) {
-        sessionStorage.removeItem('token');
+        removeStoredToken();
       }
       setUser(null);
     } finally {
@@ -50,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
     const fetchUserSession = async () => {
       try {
-        const token = sessionStorage.getItem('token');
+        const token = getStoredToken();
         if (!token) {
           if (isMounted) {
             setUser(null);
@@ -64,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Failed to load user session:', err);
         const isNetworkError = err instanceof TypeError || (err instanceof Error && err.name === 'AbortError');
         if (!isNetworkError) {
-          sessionStorage.removeItem('token');
+          removeStoredToken();
         }
         if (isMounted) setUser(null);
       } finally {
@@ -79,31 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 
 
-  // Detect duplicated tab and perform a clean single reload to refresh client state
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const currentName = window.name;
-      const storedName = sessionStorage.getItem('tab_name');
-      
-      if (!currentName || currentName !== storedName) {
-        const newName = 'tab_' + Math.random().toString(36).substring(2);
-        window.name = newName;
-        sessionStorage.setItem('tab_name', newName);
-        
-        // If storedName is present and differs, it confirms the tab was duplicated!
-        if (storedName && currentName !== storedName) {
-          window.location.reload();
-        }
-      }
-    }
-  }, []);
-
   const login = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.login(email, password);
+      const data = await api.login(email.trim(), password);
       sessionStorage.setItem('token', data.access_token);
+      localStorage.setItem('token', data.access_token);
       
       // Load user profile
       const userData = await api.get<User>('/auth/me');
@@ -128,8 +124,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.googleLogin(email, role, departmentId, idToken);
+      const data = await api.googleLogin(email.trim(), role, departmentId, idToken);
       sessionStorage.setItem('token', data.access_token);
+      localStorage.setItem('token', data.access_token);
       
       // Load user profile
       const userData = await api.get<User>('/auth/me');
@@ -181,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    sessionStorage.removeItem('token');
+    removeStoredToken();
     setUser(null);
     window.location.href = '/login';
   };

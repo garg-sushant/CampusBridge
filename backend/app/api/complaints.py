@@ -425,7 +425,13 @@ def add_comment(
     # Check for department heads
     if current_user.role == "department_head":
         dept_name = current_user.department.name if current_user.department else ""
-        if complaint.department_id != current_user.department_id and complaint.category != dept_name:
+        dept_code = current_user.department.code if current_user.department else ""
+        matches_dept = (
+            (complaint.department_id is not None and complaint.department_id == current_user.department_id) or
+            (bool(complaint.category) and complaint.category in [dept_name, dept_code]) or
+            complaint.department_id is None
+        )
+        if not matches_dept:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You cannot post comments on other departments' complaints."
@@ -474,7 +480,12 @@ def update_complaint_status(
     # Department heads cannot update complaints from other departments
     if current_user.role == "department_head":
         dept_name = current_user.department.name if current_user.department else ""
-        if complaint.department_id != current_user.department_id and complaint.category != dept_name:
+        dept_code = current_user.department.code if current_user.department else ""
+        matches_dept = (
+            (complaint.department_id is not None and complaint.department_id == current_user.department_id) or
+            (bool(complaint.category) and complaint.category in [dept_name, dept_code])
+        )
+        if not matches_dept:
             # Allow if it's currently unassigned (None), but they are claiming it for their department
             if complaint.department_id is not None or update_in.department_id != current_user.department_id:
                 raise HTTPException(

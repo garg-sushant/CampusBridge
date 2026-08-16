@@ -17,14 +17,16 @@ def get_dashboard_statistics(
     # Base queries
     complaint_query = db.query(Complaint)
     
-    # If department head, restrict complaint queries to their assigned department or category name
+    # If department head, restrict complaint queries to their assigned department or category name/code
     if current_user.role == "department_head":
         if current_user.department_id:
             dept_name = current_user.department.name if current_user.department else ""
+            dept_code = current_user.department.code if current_user.department else ""
             complaint_query = complaint_query.filter(
                 or_(
                     Complaint.department_id == current_user.department_id,
-                    Complaint.category == dept_name
+                    Complaint.category == dept_name,
+                    Complaint.category == dept_code
                 )
             )
         else:
@@ -82,10 +84,12 @@ def get_dashboard_statistics(
     if current_user.role == "department_head":
         if current_user.department_id:
             dept_name = current_user.department.name if current_user.department else ""
+            dept_code = current_user.department.code if current_user.department else ""
             urgency_query = urgency_query.filter(
                 or_(
                     Complaint.department_id == current_user.department_id,
-                    Complaint.category == dept_name
+                    Complaint.category == dept_name,
+                    Complaint.category == dept_code
                 )
             )
         else:
@@ -105,10 +109,12 @@ def get_dashboard_statistics(
     if current_user.role == "department_head":
         if current_user.department_id:
             dept_name = current_user.department.name if current_user.department else ""
+            dept_code = current_user.department.code if current_user.department else ""
             category_query = category_query.filter(
                 or_(
                     Complaint.department_id == current_user.department_id,
-                    Complaint.category == dept_name
+                    Complaint.category == dept_name,
+                    Complaint.category == dept_code
                 )
             )
         else:

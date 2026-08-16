@@ -1,22 +1,22 @@
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token, get_current_user
 from app.models.base import User, Department
-from app.schemas.auth import UserCreate, UserOut, Token
-
-import httpx
 from app.schemas.auth import UserCreate, UserOut, Token, GoogleLoginRequest
+import httpx
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
+    clean_email = user_in.email.strip().lower()
     # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    existing_user = db.query(User).filter(func.lower(User.email) == clean_email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -49,9 +49,9 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     # Hash password and create user
     hashed_password = get_password_hash(user_in.password)
     new_user = User(
-        email=user_in.email,
+        email=clean_email,
         hashed_password=hashed_password,
-        full_name=user_in.full_name,
+        full_name=user_in.full_name.strip(),
         role=target_role,
         department_id=dept_id if target_role == "department_head" else None,
         trust_score=100.0
@@ -63,28 +63,40 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == form_data.username).first()
+    clean_username = form_data.username.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == clean_username).first()
     
     if not user:
         # Check if login request matches auto-provisioning demo emails
         demo_emails = ["student@campus.edu", "ithead@campus.edu", "hostelhead@campus.edu", "admin@campus.edu"]
-        if form_data.username in demo_emails or "@campus.edu" in form_data.username or "@gmail.com" in form_data.username:
-            display_name = form_data.username.split('@')[0].replace('.', ' ').replace('_', ' ').title()
+        if clean_username in demo_emails or "@campus.edu" in clean_username or "@gmail.com" in clean_username:
+            display_name = clean_username.split('@')[0].replace('.', ' ').replace('_', ' ').title()
             hashed_password = get_password_hash(form_data.password)
             default_role = "student"
-            if "admin" in form_data.username.lower() or "dean" in form_data.username.lower():
+            if "admin" in clean_username or "dean" in clean_username:
                 default_role = "admin"
-            elif "dept" in form_data.username.lower() or "head" in form_data.username.lower() or "warden" in form_data.username.lower() or "it" in form_data.username.lower():
+            elif "dept" in clean_username or "head" in clean_username or "warden" in clean_username or "it" in clean_username:
                 default_role = "department_head"
 
             dept_id = None
             if default_role == "department_head":
-                first_dept = db.query(Department).first()
-                if first_dept:
-                    dept_id = first_dept.id
+                target_dept = None
+                if "it" in clean_username:
+                    target_dept = db.query(Department).filter(Department.code == "IT").first()
+                elif "hostel" in clean_username or "warden" in clean_username:
+                    target_dept = db.query(Department).filter(Department.code == "HOSTEL").first()
+                elif "electrical" in clean_username:
+                    target_dept = db.query(Department).filter(Department.code == "ELECTRICAL").first()
+                elif "water" in clean_username:
+                    target_dept = db.query(Department).filter(Department.code == "WATER").first()
+                
+                if not target_dept:
+                    target_dept = db.query(Department).first()
+                if target_dept:
+                    dept_id = target_dept.id
 
             user = User(
-                email=form_data.username,
+                email=clean_username,
                 hashed_password=hashed_password,
                 full_name=display_name,
                 role=default_role,
@@ -153,7 +165,8 @@ async def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db
             pass
 
     # Check if user exists in Database
-    user = db.query(User).filter(User.email == verified_email).first()
+    clean_verified_email = verified_email.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == clean_verified_email).first()
     dept_id = payload.department_id
 
     if target_role == "department_head" and not dept_id:
@@ -165,7 +178,7 @@ async def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db
     if not user:
         default_password = get_password_hash("google_oauth_verified")
         user = User(
-            email=verified_email,
+            email=clean_verified_email,
             hashed_password=default_password,
             full_name=display_name,
             role=target_role,

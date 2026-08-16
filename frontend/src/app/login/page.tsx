@@ -26,17 +26,20 @@ export default function LoginPage() {
   // Ref to autofocus the email field upon role selection
   const emailInputRef = useRef<HTMLInputElement>(null);
 
-  // Guided role selector handler
+  // Guided role selector handler (pre-fills sample credentials for rapid testing)
   const handleRoleSelect = (role: 'student' | 'dept' | 'admin') => {
     setSelectedRole(role);
-    setEmail('');
-    setPassword('');
     setFormError(null);
-    
-    // Auto-focus email input field on next render tick
-    setTimeout(() => {
-      emailInputRef.current?.focus();
-    }, 50);
+    if (role === 'student') {
+      setEmail('student@campus.edu');
+      setPassword('studentpassword');
+    } else if (role === 'dept') {
+      setEmail('ithead@campus.edu');
+      setPassword('itpassword');
+    } else if (role === 'admin') {
+      setEmail('admin@campus.edu');
+      setPassword('adminpassword');
+    }
   };
 
   // Instant login bypass handler
@@ -76,23 +79,17 @@ export default function LoginPage() {
     }
   };
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     
-    if (!selectedRole) {
-      setFormError('Please select your campus role at the bottom first.');
-      return;
-    }
-    
-    if (!email || !password) {
-      setFormError('Please fill in both email and password fields.');
+    if (!email.trim() || !password) {
+      setFormError('Please enter both your email and password.');
       return;
     }
     
     try {
-      await login(email, password);
+      await login(email.trim(), password);
     } catch {
       // Auth errors are captured and handled by our AuthContext
     }
@@ -101,7 +98,7 @@ export default function LoginPage() {
   const isBtnLoading = loading || autoLoginLoading || googleLoading;
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center bg-zinc-950 px-4">
+    <div className="relative min-h-screen flex flex-col items-center justify-center bg-zinc-950 px-4 py-8">
       {/* Background decoration blur */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-indigo-500/5 blur-[120px] pointer-events-none" />
 
@@ -127,14 +124,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Instruction banner if no role is selected */}
-            {!selectedRole && (
-              <div className="flex items-start space-x-2.5 p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold leading-relaxed animate-pulse">
-                <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
-                <span>Select your role below first to unlock the login input fields.</span>
-              </div>
-            )}
-
             {/* Email Field */}
             <div className="space-y-1.5">
               <label htmlFor="login-email" className="block text-xs font-bold text-zinc-400 uppercase tracking-wider">
@@ -146,14 +135,12 @@ export default function LoginPage() {
                   id="login-email"
                   type="email"
                   ref={emailInputRef}
-                  disabled={!selectedRole}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={selectedRole ? "name@campus.edu" : "Select role below first"}
+                  placeholder="name@campus.edu"
+                  required
                   aria-required="true"
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-white placeholder-neutral-600 transition-all duration-300 ${
-                    !selectedRole ? 'opacity-40 cursor-not-allowed bg-zinc-950/20' : 'opacity-100'
-                  }`}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-white placeholder-neutral-600 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
                 />
               </div>
             </div>
@@ -168,14 +155,12 @@ export default function LoginPage() {
                 <input
                   id="login-password"
                   type="password"
-                  disabled={!selectedRole}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={selectedRole ? "••••••••" : "Select role below first"}
+                  placeholder="••••••••"
+                  required
                   aria-required="true"
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-white placeholder-neutral-600 transition-all duration-300 ${
-                    !selectedRole ? 'opacity-40 cursor-not-allowed bg-zinc-950/20' : 'opacity-100'
-                  }`}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-white placeholder-neutral-600 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
                 />
               </div>
             </div>
@@ -183,7 +168,7 @@ export default function LoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isBtnLoading || !selectedRole}
+              disabled={isBtnLoading}
               className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-900 disabled:text-zinc-600 font-bold text-white shadow-lg transition-all duration-200 disabled:cursor-not-allowed cursor-pointer"
             >
               {isBtnLoading ? (
