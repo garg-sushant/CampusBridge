@@ -397,6 +397,48 @@ export default function StudentDashboard() {
                           <span className="text-slate-600">•</span>
                           <span>Dept: {c.department?.name || 'Assessing...'}</span>
                         </div>
+
+                        {/* Direct Screenshot Proof Preview on Card */}
+                        {c.attachments && c.attachments.length > 0 && (
+                          <div className="flex items-center gap-3 pt-2">
+                            {c.attachments.slice(0, 3).map((att) => {
+                              const fullUrl = getBackendMediaUrl(att.file_url);
+                              return (
+                                <div 
+                                  key={att.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewImageUrl(fullUrl);
+                                  }}
+                                  className="relative group/thumb rounded-lg overflow-hidden border border-slate-700/70 bg-slate-900 w-24 h-16 shrink-0 cursor-pointer shadow-sm hover:border-blue-400 transition-all"
+                                  title="Click to expand full screenshot"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img 
+                                    src={fullUrl}
+                                    alt="Evidence thumbnail"
+                                    onError={(e) => {
+                                      const target = e.currentTarget;
+                                      const fallback = att.file_url.startsWith('/') ? att.file_url : `/${att.file_url}`;
+                                      if (!target.dataset.triedFallback && target.src !== window.location.origin + fallback) {
+                                        target.dataset.triedFallback = 'true';
+                                        target.src = fallback;
+                                      }
+                                    }}
+                                    className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-300"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                                    <span className="text-[10px] font-bold text-white bg-black/80 px-1.5 py-0.5 rounded">🔍 View</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            <span className="text-xs font-semibold text-blue-400/90 flex items-center gap-1.5 pl-1">
+                              <ImageIcon className="h-3.5 w-3.5" />
+                              {c.attachments.length} {c.attachments.length === 1 ? 'Proof Screenshot' : 'Proof Screenshots'}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-end">
@@ -744,6 +786,18 @@ export default function StudentDashboard() {
             <img 
               src={previewImageUrl} 
               alt="Expanded Proof Evidence Preview" 
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.dataset.triedFallback) {
+                  target.dataset.triedFallback = 'true';
+                  try {
+                    const urlObj = new URL(previewImageUrl);
+                    target.src = urlObj.pathname;
+                  } catch {
+                    target.src = previewImageUrl.startsWith('/') ? previewImageUrl : `/${previewImageUrl}`;
+                  }
+                }
+              }}
               className="max-h-[85vh] w-auto max-w-full rounded-xl object-contain"
             />
           </div>

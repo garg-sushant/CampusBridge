@@ -1179,6 +1179,18 @@ export default function AdminDashboard() {
               <img 
                 src={previewImageUrl} 
                 alt="Student Proof High Resolution View" 
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.dataset.triedFallback) {
+                    target.dataset.triedFallback = 'true';
+                    try {
+                      const urlObj = new URL(previewImageUrl);
+                      target.src = urlObj.pathname;
+                    } catch {
+                      target.src = previewImageUrl.startsWith('/') ? previewImageUrl : `/${previewImageUrl}`;
+                    }
+                  }
+                }}
                 className="max-h-[75vh] w-auto object-contain rounded-lg shadow-xl"
               />
             </div>

@@ -213,7 +213,7 @@ export const api = {
 };
 
 /**
- * Returns the fully qualified URL for backend media files (uploads/static).
+ * Returns the fully qualified or relative URL for backend & public media files.
  */
 export function getBackendMediaUrl(path?: string | null): string {
   if (!path) return '';
@@ -222,14 +222,20 @@ export function getBackendMediaUrl(path?: string | null): string {
   }
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-  // If in browser and running on localhost, always point to local backend
+  // If in browser on localhost/127.0.0.1, connect to local backend port 8000
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return `http://localhost:8000${cleanPath}`;
   }
 
-  const apiBase = getApiBaseUrl();
-  const host = apiBase.replace(/\/api\/?$/, '');
-  return `${host}${cleanPath}`;
+  // In production (e.g. Vercel), check if NEXT_PUBLIC_API_URL has external host
+  const rawApiUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+  if (rawApiUrl && (rawApiUrl.startsWith('http://') || rawApiUrl.startsWith('https://'))) {
+    const host = rawApiUrl.replace(/\/api\/?$/, '');
+    return `${host}${cleanPath}`;
+  }
+
+  // Otherwise serve directly from public assets folder via Next.js CDN
+  return cleanPath;
 }
 
 
